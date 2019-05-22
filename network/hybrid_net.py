@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .dense_unet_3d import DenseNet3D
+from network.dense_unet_3d import DenseNet3D
 
 
 class HybridFeatureFusionLayer(nn.Module):
@@ -37,9 +37,9 @@ class HybridNet(nn.Module):
         self.transition3 = backbone[9]
         self.denseblock4 = backbone[10]
         self.bn = backbone[11]
-        self.up1 = _Up(x1_ch=504, x2_ch=496, out_ch=504)
-        self.up2 = _Up(x1_ch=504, x2_ch=224, out_ch=224)
-        self.up3 = _Up(x1_ch=224, x2_ch=192, out_ch=192)
+        self.up1 = _Up(x1_ch=1659, x2_ch=1590, out_ch=504)
+        self.up2 = _Up(x1_ch=504, x2_ch=588, out_ch=224)
+        self.up3 = _Up(x1_ch=224, x2_ch=312, out_ch=192)
         self.up4 = _Up(x1_ch=192, x2_ch=96, out_ch=96, scale_factor=(2, 2, 2))
         self.up5 = nn.Sequential(
             _Interpolate(scale_factor=(2, 2, 2)),
@@ -91,9 +91,9 @@ class _Up(nn.Module):
         self.up = _Interpolate(scale_factor=scale_factor)
         self.conv1x1 = nn.Conv3d(in_channels=x2_ch, out_channels=x1_ch, kernel_size=1)
         self.conv = nn.Sequential(
-            nn.BatchNorm3d(num_features=x1_ch),
-            nn.ReLU(inplace=True),
-            nn.Conv3d(in_channels=x1_ch, out_channels=out_ch, kernel_size=3, padding=1)
+            nn.Conv3d(in_channels=x1_ch, out_channels=out_ch, kernel_size=3, padding=1),
+            nn.BatchNorm3d(num_features=out_ch),
+            nn.ReLU(inplace=True)
         )
 
     def forward(self, x1, x2):
@@ -102,3 +102,10 @@ class _Up(nn.Module):
         x = x1 + x2
         x = self.conv(x)
         return x
+
+
+if __name__ == '__main__':
+    from torchsummary import summary
+
+    net = HybridNet(in_ch=4).cuda()
+    summary(net, [(4, 224, 224, 12), (64, 224, 224, 12)])

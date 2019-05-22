@@ -2,14 +2,15 @@ import json
 from argparse import ArgumentParser
 
 import cv2
+import numpy as np
 import torch
 from pathlib2 import Path
 from torch.utils.data import DataLoader, SequentialSampler
+from tqdm import tqdm
 
 import utils.checkpoint as cp
 from dataset import kits19
 from network import ResUNet
-from utils.func import *
 from utils.vis import imshow
 
 

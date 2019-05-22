@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import cv2
@@ -13,15 +14,19 @@ from torch.utils import data
 from dataset.transform import to_numpy
 
 
-class KiTS19(data.Dataset):
-    def __init__(self, root, stack_num=1, valid_rate=0.3,
-                 train_transform=None, valid_transform=None, spec_classes=None):
+class KiTS19_vol(data.Dataset):
+    def __init__(self, root, slice_num=1, valid_rate=0.3,
+                 train_transform=None, valid_transform=None, spec_classes=None, roi_path=None, roi_d=5):
         self.root = Path(root)
-        self.stack_num = stack_num
+        self.slice_num = slice_num
         self.train_transform = train_transform
         self.valid_transform = valid_transform
+        if roi_path is not None:
+            self.roi_path = Path(roi_path)
+        else:
+            self.roi_path = self.root / 'roi.json'
 
-        self.imgs, self.labels = self._get_img_list(self.root, valid_rate)
+        self.imgs, self.labels = self._get_img_list(self.root, valid_rate, roi_d)
         self._split_subset()
 
         if spec_classes is None:
@@ -33,9 +38,13 @@ class KiTS19(data.Dataset):
         self._num_classes = len(self.get_classes_name())
         self._img_channels = self.__getitem__(0)[0].shape[0]
 
-    def _get_img_list(self, root, valid_rate):
+    def _get_img_list(self, root, valid_rate, roi_d):
         imgs = []
         labels = []
+
+        assert self.roi_path.exists()
+        with open(self.roi_path, 'r') as f:
+            self.rois = json.load(f)
 
         cases = sorted([d for d in root.iterdir() if d.is_dir()])
         self.split_case = int(np.round(len(cases) * valid_rate))
@@ -47,8 +56,27 @@ class KiTS19(data.Dataset):
             segmentation_dir = case / 'segmentation'
             assert imaging_dir.exists() and segmentation_dir.exists()
 
-            imgs += sorted(list(imaging_dir.glob('*.npy')))
-            labels += sorted(list(segmentation_dir.glob('*.npy')))
+            case_imgs = sorted(list(imaging_dir.glob('*.npy')))
+            case_labels = sorted(list(segmentation_dir.glob('*.npy')))
+
+            roi = self.rois[f'case_{i:05d}']
+            min_z = max(0, roi['min_z'] - roi_d)
+            max_z = min(len(case_imgs) - 1, roi['max_z'] + roi_d)
+
+            case_imgs = case_imgs[min_z:max_z + 1]
+            case_labels = case_labels[min_z:max_z + 1]
+
+            img_volumes = []
+            label_volumes = []
+            for i in range(0, len(case_imgs), self.slice_num):
+                end = min(i + self.slice_num, len(case_imgs))
+                img_volume = case_imgs[i:end]
+                img_volumes.append(img_volume)
+                label_volume = case_labels[i:end]
+                label_volumes.append(label_volume)
+
+            imgs += img_volumes
+            labels += label_volumes
 
             assert len(imgs) == len(labels)
             self.case_indices.append(len(imgs))
@@ -140,7 +168,7 @@ class KiTS19(data.Dataset):
         image, label = data['image'], data['label']
 
         image = image.astype(np.float32)
-        image = image.transpose((2, 0, 1))
+        image = np.expand_dims(image, axis=0)
         label = label.astype(np.int64)
 
         idx = list(range(len(self.get_classes_name(spec=False))))
@@ -166,27 +194,35 @@ class KiTS19(data.Dataset):
                 case_i = i
                 break
 
-        imgs = []
-        for i in range(idx - self.stack_num // 2, idx + self.stack_num // 2 + 1):
-            if i < self.case_indices[case_i]:
-                i = self.case_indices[case_i]
-            elif i >= self.case_indices[case_i + 1]:
-                i = self.case_indices[case_i + 1] - 1
-            img_path = self.imgs[i]
-            img = np.load(str(img_path))
-            imgs.append(img)
-        img = np.stack(imgs, axis=2)
+        roi = self.rois[f'case_{case_i:05d}']
 
-        label_path = self.labels[idx]
-        label = np.load(str(label_path))
+        imgs = []
+        labels = []
+        for img_path, label_path in zip(self.imgs[idx], self.labels[idx]):
+            img = np.load(str(img_path))
+            img = img[roi['min_y']:roi['max_y'], roi['min_x']:roi['max_x']]
+            imgs.append(img)
+
+            label = np.load(str(label_path))
+            label = label[roi['min_y']:roi['max_y'], roi['min_x']:roi['max_x']]
+            labels.append(label)
+
+        if len(imgs) != self.slice_num:
+            num = self.slice_num - len(imgs)
+            for _ in range(num):
+                imgs.append(np.zeros((img.shape[0], img.shape[1])))
+                labels.append(np.zeros((label.shape[0], label.shape[1])))
+
+        img = np.stack(imgs, axis=-1)
+        label = np.stack(labels, axis=-1)
 
         data = {'image': img, 'label': label}
         if idx in self.train_indices and self.train_transform is not None:
             data = self.train_transform(data)
         elif idx in self.valid_indices and self.valid_transform is not None:
             data = self.valid_transform(data)
-
         data = self._default_transform(data)
+
         img = data['image']
         label = data['label']
 
@@ -230,10 +266,10 @@ class kits19_transform:
 if __name__ == '__main__':
     root = Path('../data')
 
-    dataset = KiTS19(root=root, stack_num=3, valid_rate=0.3,
-                     train_transform=None,
-                     valid_transform=None,
-                     spec_classes=[0, 1, 2])
+    dataset = KiTS19_vol(root=root, slice_num=12, valid_rate=0.3,
+                         train_transform=None,
+                         valid_transform=None,
+                         spec_classes=[0, 1, 2])
 
     from torch.utils.data import DataLoader, SequentialSampler
     from utils.vis import imshow
@@ -243,5 +279,6 @@ if __name__ == '__main__':
     data_loader = DataLoader(subset, batch_size=1, sampler=sampler)
 
     for batch_idx, (imgs, labels, idx) in enumerate(data_loader):
-        img, label, _ = dataset.vis_transform(imgs=imgs, labels=labels, preds=None)
-        imshow(title='kits19', imgs=(img[0][1], label[0]))
+        for i in range(imgs.shape[4]):
+            img, label, _ = dataset.vis_transform(imgs=imgs[:, :, :, :, i], labels=labels[:, :, :, i], preds=None)
+            imshow(title='kits19', imgs=(img[0], label[0]))

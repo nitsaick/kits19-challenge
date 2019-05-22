@@ -69,9 +69,9 @@ class _Up(nn.Module):
         self.up = _Interpolate()
         self.conv1x1 = nn.Conv2d(in_channels=x2_ch, out_channels=x1_ch, kernel_size=1)
         self.conv = nn.Sequential(
-            nn.BatchNorm2d(num_features=x1_ch),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(in_channels=x1_ch, out_channels=out_ch, kernel_size=3, padding=1)
+            nn.Conv2d(in_channels=x1_ch, out_channels=out_ch, kernel_size=3, padding=1),
+            nn.BatchNorm2d(num_features=out_ch),
+            nn.ReLU(inplace=True)
         )
 
     def forward(self, x1, x2):

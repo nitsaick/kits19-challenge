@@ -1,192 +1,59 @@
-from argparse import ArgumentParser
+import sys
 
+import click
+import numpy as np
 import torch
 import torch.nn as nn
 from pathlib2 import Path
+from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
+from tqdm import tqdm
 
 import utils.checkpoint as cp
-from dataset import kits19
+from dataset import KiTS19
 from dataset.transform import Compose, RandomScaleCrop, MedicalTransform
 from network import ResUNet
-from utils.func import *
 from utils.metrics import Evaluator
 from utils.vis import imshow
 
 
-class Trainer:
-    def __init__(self, net, dataset, criterion, optimizer, scheduler, epoch_num, start_epoch, batch_size):
-        self.net = net
-        self.dataset = dataset
-        self.criterion = criterion
-        self.optimizer = optimizer
-        self.scheduler = scheduler
-        self.epoch_num = epoch_num
-        self.start_epoch = start_epoch
-        self.batch_size = batch_size
+@click.command()
+@click.option('-e', '--epoch', 'epoch_num', help='Number of training epoch', type=int, default=1, show_default=True)
+@click.option('-b', '--batch', 'batch_size', help='Number of batch size', type=int, default=1, show_default=True)
+@click.option('-l', '--lr', help='Learning rate', type=float, default=0.0001, show_default=True)
+@click.option('-g', '--num_gpu', help='Number of GPU', type=int, default=1, show_default=True)
+@click.option('--data', 'data_path', help='kits19 data path',
+              type=click.Path(exists=True, dir_okay=True, resolve_path=True),
+              default='data', show_default=True)
+@click.option('--log', 'log_path', help='Checkpoint and log file save path',
+              type=click.Path(dir_okay=True, resolve_path=True),
+              default='runs', show_default=True)
+@click.option('-r', '--resume', help='Resume checkpoint file to continue training',
+              type=click.Path(exists=True, file_okay=True, resolve_path=True), default=None)
+@click.option('--eval_intvl', help='Number of epoch interval of evaluation. '
+                                   'No evaluation when set to 0',
+              type=int, default=1, show_default=True)
+@click.option('--cp_intvl', help='Number of epoch interval of checkpoint save. '
+                                 'No checkpoint save when set to 0',
+              type=int, default=1, show_default=True)
+@click.option('--vis_intvl', help='Number of iteration interval of display visualize image. '
+                                  'No display when set to 0',
+              type=int, default=20, show_default=True)
+@click.option('--num_workers', help='Number of workers on dataloader. '
+                                    'Recommend 0 in Windows. '
+                                    'Recommend num_gpu in Linux',
+              type=int, default=0, show_default=True)
+def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_intvl, cp_intvl, vis_intvl, num_workers):
+    # prepare
+    data_path = Path(data_path)
+    log_path = Path(log_path)
+    cp_path = log_path / 'checkpoint'
 
-        self.cuda = True
-        self.gpu_ids = [0]
-        self.eval_func = 'dc'
-        self.visualize_iter_interval = 1
-        self.checkpoint_epoch_interval = 10
-        self.eval_epoch_interval = 10
-        self.num_workers = 0
-        self.checkpoint_dir = 'runs'
-
-    def run(self):
-        self.net = torch.nn.DataParallel(self.net, device_ids=self.gpu_ids).cuda()
-        self.criterion = self.criterion.cuda()
-        for state in self.optimizer.state.values():
-            for k, v in state.items():
-                if isinstance(v, torch.Tensor):
-                    state[k] = v.cuda()
-
-        valid_acc = 0.0
-        best_acc = 0.0
-        best_epoch = 0
-
-        for epoch in range(self.start_epoch, self.epoch_num):
-            epoch_str = ' Epoch {}/{} '.format(epoch + 1, self.epoch_num)
-            print('{:-^40s}'.format(epoch_str))
-
-            for param_group in self.optimizer.param_groups:
-                lr = param_group['lr']
-                break
-            print('Learning rate: {}'.format(lr))
-
-            # Training phase
-            self.net.train()
-            torch.set_grad_enabled(True)
-
-            try:
-                valid_acc = self.evaluation(epoch, 'valid')
-                loss = self.training(epoch)
-
-                if (epoch + 1) % self.eval_epoch_interval == 0:
-                    self.net.eval()
-                    torch.set_grad_enabled(False)
-
-                    train_acc = self.evaluation(epoch, 'train')
-
-                    valid_acc = self.evaluation(epoch, 'valid')
-
-                    print('Train data {} acc:  {:.5f}'.format(self.eval_func, train_acc))
-                    print('Valid data {} acc:  {:.5f}'.format(self.eval_func, valid_acc))
-
-            except KeyboardInterrupt:
-                cp_path = os.path.join(self.checkpoint_dir, 'INTERRUPTED.pth')
-                cp.save(epoch, self.net.module, self.optimizer, cp_path)
-                return
-
-            if valid_acc > best_acc:
-                best_acc = valid_acc
-                best_epoch = epoch
-                checkpoint_filename = 'best.pth'
-                cp.save(epoch, self.net.module, self.optimizer, os.path.join(self.checkpoint_dir, checkpoint_filename))
-                print('Update best acc!')
-
-            if (epoch + 1) % self.checkpoint_epoch_interval == 0:
-                checkpoint_filename = 'cp_{:03d}.pth'.format(epoch + 1)
-                cp.save(epoch, self.net.module, self.optimizer, os.path.join(self.checkpoint_dir, checkpoint_filename))
-
-            print(f'Best epoch: {best_epoch + 1}')
-            print(f'Best acc: {best_acc:.5f}')
-
-    def training(self, epoch):
-        sampler = RandomSampler(self.dataset.train_dataset)
-
-        train_loader = DataLoader(self.dataset.train_dataset, batch_size=self.batch_size, sampler=sampler,
-                                  num_workers=self.num_workers, pin_memory=True)
-
-        tbar = tqdm(train_loader, ascii=True, desc='train', dynamic_ncols=True)
-        for batch_idx, (imgs, labels, idx) in enumerate(tbar):
-            self.optimizer.zero_grad()
-
-            if self.cuda:
-                imgs, labels = imgs.cuda(), labels.cuda()
-
-            outputs = self.net(imgs)
-
-            loss = self.criterion(outputs, labels)
-            loss.backward()
-            self.optimizer.step()
-
-            if self.visualize_iter_interval > 0 and batch_idx % self.visualize_iter_interval == 0:
-                outputs = outputs.cpu().detach().numpy().argmax(axis=1)
-                imgs, labels, outputs = self.dataset.vis_transform(imgs, labels, outputs)
-                imshow(title='Train', imgs=(imgs[0][2], labels[0], outputs[0]), shape=(1, 3),
-                       subtitle=('image', 'label', 'predict'))
-
-            tbar.set_postfix(loss='{:.5f}'.format(loss.item()))
-        self.scheduler.step(loss.item())
-
-        return loss.item()
-
-    def evaluation(self, epoch, type):
-        type = type.lower()
-        if type == 'train':
-            subset = self.dataset.train_dataset
-            case = self.dataset.case_indices[self.dataset.split_case:]
-        elif type == 'valid':
-            subset = self.dataset.valid_dataset
-            case = self.dataset.case_indices[:self.dataset.split_case + 1]
-
-        vol_case_i = 0
-        vol_label = []
-        vol_output = []
-
-        sampler = SequentialSampler(subset)
-        data_loader = DataLoader(subset, batch_size=self.batch_size, sampler=sampler,
-                                 num_workers=self.num_workers, pin_memory=True)
-
-        evaluator = Evaluator(self.dataset.num_classes)
-
-        with tqdm(total=len(case), ascii=True, desc=f'eval/{type:5}', dynamic_ncols=True) as pbar:
-            for batch_idx, (imgs, labels, idx) in enumerate(data_loader):
-                if self.cuda:
-                    imgs = imgs.cuda()
-                outputs = self.net(imgs).argmax(dim=1)
-
-                np_labels = labels.cpu().detach().numpy()
-                np_outputs = outputs.cpu().detach().numpy()
-                idx = idx.numpy()
-
-                vol_label.append(np_labels)
-                vol_output.append(np_outputs)
-
-                while vol_case_i < len(case) - 1 and idx[-1] >= case[vol_case_i + 1] - 1:
-                    vol_output = np.concatenate(vol_output, axis=0)
-                    vol_label = np.concatenate(vol_label, axis=0)
-
-                    vol_idx = case[vol_case_i + 1] - case[vol_case_i]
-                    evaluator.add(vol_output[:vol_idx], vol_label[:vol_idx])
-
-                    vol_output = [vol_output[vol_idx:]]
-                    vol_label = [vol_label[vol_idx:]]
-                    vol_case_i += 1
-                    pbar.update(1)
-
-        acc = evaluator.eval(self.eval_func)
-        evaluator.print_acc()
-        return acc
-
-
-def get_args():
-    parser = ArgumentParser()
-    parser.add_argument('-r', '--resume', type=str, default=None,
-                        help='resume checkpoint')
-    args = parser.parse_args()
-    return args
-
-if __name__ == '__main__':
-    args = get_args()
-
-    EPOCH = 100
-    BATCH_SIZE = 32
-    LR = 0.0001
-
-    data_path = Path('data')
+    if not resume and log_path.exists() and len(list(log_path.glob('*'))) > 0:
+        print(f'log path "{str(log_path)}" has old file', file=sys.stderr)
+        sys.exit(-1)
+    if not cp_path.exists():
+        cp_path.mkdir(parents=True)
 
     train_transform = Compose([
         RandomScaleCrop(output_size=512, scale_range=0.2, type='train'),
@@ -196,31 +63,195 @@ if __name__ == '__main__':
         RandomScaleCrop(output_size=512, scale_range=0.2, type='valid'),
         MedicalTransform(type='valid')
     ])
-
-    dataset = kits19(data_path, stack_num=5, valid_rate=0.3,
+    dataset = KiTS19(data_path, stack_num=5, valid_rate=0.3,
                      train_transform=train_transform,
                      valid_transform=valid_transform,
-                     specified_classes=[0, 1, 1])
+                     spec_classes=[0, 1, 1])
 
     net = ResUNet(in_ch=dataset.img_channels, out_ch=dataset.num_classes, base_ch=64)
 
-    optimizer = torch.optim.Adam(net.parameters(), lr=LR)
+    optimizer = torch.optim.Adam(net.parameters(), lr=lr)
 
     start_epoch = 0
-    if args.resume:
-        cp_file = Path(args.resume)
+    if resume:
+        cp_file = Path(resume)
         net, optimizer, start_epoch = cp.load_params(net, optimizer, root=cp_file)
 
     # weights = np.array([0.2, 1.2, 2.2], dtype=np.float32)
     # weights = torch.from_numpy(weights)
-    criterion = nn.CrossEntropyLoss(weight=None)
+    weights = None
+    criterion = nn.CrossEntropyLoss(weight=weights)
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.1, patience=5, verbose=True,
         threshold=0.0001, threshold_mode='rel', cooldown=0, min_lr=0, eps=1e-08
     )
 
+    logger = SummaryWriter(str(log_path))
+
+    gpu_ids = [i for i in range(num_gpu)]
+
+    print(f'{" Start training ":-^40s}\n')
+    msg = f'Net: {net.__class__.__name__}\n' + \
+          f'Dataset: {dataset.__class__.__name__}\n' + \
+          f'Epochs: {epoch_num}\n' + \
+          f'Learning rate: {optimizer.param_groups[0]["lr"]}\n' + \
+          f'Batch size: {batch_size}\n' + \
+          f'Device: cuda{str(gpu_ids)}\n'
+    print(msg)
+
     torch.cuda.empty_cache()
-    trainer = Trainer(net, dataset, criterion, optimizer, scheduler, epoch_num=EPOCH, start_epoch=start_epoch,
-                      batch_size=BATCH_SIZE)
-    trainer.run()
+
+    # to GPU device
+    net = torch.nn.DataParallel(net, device_ids=gpu_ids).cuda()
+    criterion = criterion.cuda()
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if isinstance(v, torch.Tensor):
+                state[k] = v.cuda()
+
+    # start training
+    valid_score = 0.0
+    best_score = 0.0
+    best_epoch = 0
+
+    for epoch in range(start_epoch, epoch_num):
+        epoch_str = f' Epoch {epoch + 1}/{epoch_num} '
+        print(f'{epoch_str:-^40s}')
+
+        lr = optimizer.param_groups[0]['lr']
+        print(f'Learning rate: {lr}')
+
+        net.train()
+        torch.set_grad_enabled(True)
+        try:
+            loss = training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl)
+            logger.add_scalar('loss', loss, epoch)
+
+            if eval_intvl > 0 and (epoch + 1) % eval_intvl == 0:
+                net.eval()
+                torch.set_grad_enabled(False)
+
+                train_score = evaluation(net, dataset, batch_size, num_workers, vis_intvl, logger, epoch, type='train')
+                valid_score = evaluation(net, dataset, batch_size, num_workers, vis_intvl, logger, epoch, type='valid')
+
+                print(f'Train data score: {train_score:.5f}')
+                print(f'Valid data score: {valid_score:.5f}')
+
+        except KeyboardInterrupt:
+            cp_file = cp_path / 'INTERRUPTED.pth'
+            cp.save(epoch, net.module, optimizer, str(cp_file))
+            return
+
+        if valid_score > best_score:
+            best_score = valid_score
+            best_epoch = epoch
+            cp_file = cp_path / 'best.pth'
+            cp.save(epoch, net.module, optimizer, str(cp_file))
+            print('Update best acc!')
+
+        if (epoch + 1) % cp_intvl == 0:
+            cp_file = cp_path / f'cp_{epoch + 1:03d}.pth'
+            cp.save(epoch, net.module, optimizer, str(cp_file))
+
+        print(f'Best epoch: {best_epoch + 1}')
+        print(f'Best score: {best_score:.5f}')
+
+
+def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl):
+    sampler = RandomSampler(dataset.train_dataset)
+
+    train_loader = DataLoader(dataset.train_dataset, batch_size=batch_size, sampler=sampler,
+                              num_workers=num_workers, pin_memory=True)
+
+    tbar = tqdm(train_loader, ascii=True, desc='train', dynamic_ncols=True)
+    for batch_idx, (imgs, labels, idx) in enumerate(tbar):
+        optimizer.zero_grad()
+
+        imgs, labels = imgs.cuda(), labels.cuda()
+        outputs = net(imgs)
+
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+
+        if vis_intvl > 0 and batch_idx % vis_intvl == 0:
+            outputs = outputs.cpu().detach().numpy().argmax(axis=1)
+            imgs, labels, outputs = dataset.vis_transform(imgs, labels, outputs)
+            imshow(title='Train', imgs=(imgs[0][2], labels[0], outputs[0]), shape=(1, 3),
+                   subtitle=('image', 'label', 'predict'))
+
+        tbar.set_postfix(loss=f'{loss.item():.5f}')
+
+    scheduler.step(loss.item())
+    return loss.item()
+
+
+def evaluation(net, dataset, batch_size, num_workers, vis_intvl, logger, epoch, type):
+    type = type.lower()
+    if type == 'train':
+        subset = dataset.train_dataset
+        case = dataset.case_indices[dataset.split_case:]
+    elif type == 'valid':
+        subset = dataset.valid_dataset
+        case = dataset.case_indices[:dataset.split_case + 1]
+
+    vol_case_i = 0
+    vol_label = []
+    vol_output = []
+
+    sampler = SequentialSampler(subset)
+    data_loader = DataLoader(subset, batch_size=batch_size, sampler=sampler,
+                             num_workers=num_workers, pin_memory=True)
+
+    evaluator = Evaluator(dataset.num_classes)
+
+    with tqdm(total=len(case) - 1, ascii=True, desc=f'eval/{type:5}', dynamic_ncols=True) as pbar:
+        for batch_idx, (imgs, labels, idx) in enumerate(data_loader):
+            imgs = imgs.cuda()
+            outputs = net(imgs).argmax(dim=1)
+
+            np_labels = labels.cpu().detach().numpy()
+            np_outputs = outputs.cpu().detach().numpy()
+            idx = idx.numpy()
+
+            vol_label.append(np_labels)
+            vol_output.append(np_outputs)
+
+            while vol_case_i < len(case) - 1 and idx[-1] >= case[vol_case_i + 1] - 1:
+                vol_output = np.concatenate(vol_output, axis=0)
+                vol_label = np.concatenate(vol_label, axis=0)
+
+                vol_idx = case[vol_case_i + 1] - case[vol_case_i]
+                evaluator.add(vol_output[:vol_idx], vol_label[:vol_idx])
+
+                vol_output = [vol_output[vol_idx:]]
+                vol_label = [vol_label[vol_idx:]]
+                vol_case_i += 1
+                pbar.update(1)
+
+            if vis_intvl > 0 and batch_idx % vis_intvl == 0:
+                imgs, labels, outputs = dataset.vis_transform(imgs, labels, outputs)
+                imshow(title='Train', imgs=(imgs[0][2], labels[0], outputs[0]), shape=(1, 3),
+                       subtitle=('image', 'label', 'predict'))
+
+    acc = evaluator.eval()
+
+    for k in sorted(list(acc.keys())):
+        if k == 'dc_each_case': continue
+        print(f'{type}/{k}: {acc[k]:.5f}')
+        logger.add_scalar(f'{type}/{k}', acc[k], epoch)
+
+    for i in range(len(acc['dc_each_case'])):
+        dc_each_case = acc['dc_each_case'][i]
+        for j in range(len(dc_each_case)):
+            dc = dc_each_case[j]
+            logger.add_scalar(f'{type}_each_case/{i:05d}/dc_{j}', dc, epoch)
+
+    score = acc['dc_per_case_1']
+    logger.add_scalar(f'{type}/score', score, epoch)
+    return score
+
+
+if __name__ == '__main__':
+    main()

@@ -133,7 +133,7 @@ class RandomScaleCrop:
                             border_mode=cv2.BORDER_CONSTANT, value=[0, 0, 0]),
                 CenterCrop(height=self.output_size[0], width=self.output_size[1], p=1)
             ])
-        aug.add_targets()
+
         data = aug(image=img, mask=label)
         img, label = data['image'], data['mask']
 
@@ -167,7 +167,7 @@ class MedicalTransform:
         return data
 
 
-class MT3D:
+class MedicalTransform3D:
     def __init__(self, type):
         self.type = type
 
@@ -189,21 +189,21 @@ class MT3D:
 
             keys = {}
             targets = {}
-            for i in range(1, img.shape[3]):
+            for i in range(1, img.shape[2]):
                 keys.update({f'image{i}': 'image'})
                 keys.update({f'mask{i}': 'mask'})
-                targets.update({f'image{i}': img[:, :, :, i]})
-                targets.update({f'mask{i}': label[:, :, :, i]})
+                targets.update({f'image{i}': img[:, :, i]})
+                targets.update({f'mask{i}': label[:, :, i]})
             aug.add_targets(keys)
 
-            targets.update({'image': img[:, :, :, 0]})
-            targets.update({'mask': label[:, :, :, 0]})
+            targets.update({'image': img[:, :, 0]})
+            targets.update({'mask': label[:, :, 0]})
 
-            data = aug(*targets)
+            data = aug(**targets)
             imgs = [data['image']]
             labels = [data['mask']]
 
-            for i in range(1, img.shape[3]):
+            for i in range(1, img.shape[2]):
                 imgs.append(data[f'image{i}'])
                 labels.append(data[f'mask{i}'])
 

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import cv2
@@ -13,15 +14,19 @@ from torch.utils import data
 from dataset.transform import to_numpy
 
 
-class KiTS19(data.Dataset):
+class KiTS19_roi(data.Dataset):
     def __init__(self, root, stack_num=1, valid_rate=0.3,
-                 train_transform=None, valid_transform=None, spec_classes=None):
+                 train_transform=None, valid_transform=None, spec_classes=None, roi_path=None, roi_d=5):
         self.root = Path(root)
         self.stack_num = stack_num
         self.train_transform = train_transform
         self.valid_transform = valid_transform
+        if roi_path is not None:
+            self.roi_path = Path(roi_path)
+        else:
+            self.roi_path = self.root / 'roi.json'
 
-        self.imgs, self.labels = self._get_img_list(self.root, valid_rate)
+        self.imgs, self.labels = self._get_img_list(self.root, valid_rate, roi_d)
         self._split_subset()
 
         if spec_classes is None:
@@ -33,9 +38,13 @@ class KiTS19(data.Dataset):
         self._num_classes = len(self.get_classes_name())
         self._img_channels = self.__getitem__(0)[0].shape[0]
 
-    def _get_img_list(self, root, valid_rate):
+    def _get_img_list(self, root, valid_rate, roi_d):
         imgs = []
         labels = []
+
+        assert self.roi_path.exists()
+        with open(self.roi_path, 'r') as f:
+            self.rois = json.load(f)
 
         cases = sorted([d for d in root.iterdir() if d.is_dir()])
         self.split_case = int(np.round(len(cases) * valid_rate))
@@ -47,8 +56,15 @@ class KiTS19(data.Dataset):
             segmentation_dir = case / 'segmentation'
             assert imaging_dir.exists() and segmentation_dir.exists()
 
-            imgs += sorted(list(imaging_dir.glob('*.npy')))
-            labels += sorted(list(segmentation_dir.glob('*.npy')))
+            case_imgs = sorted(list(imaging_dir.glob('*.npy')))
+            case_labels = sorted(list(segmentation_dir.glob('*.npy')))
+
+            roi = self.rois[f'case_{i:05d}']
+            min_z = max(0, roi['min_z'] - roi_d)
+            max_z = min(len(case_imgs) - 1, roi['max_z'] + roi_d)
+
+            imgs += case_imgs[min_z:max_z + 1]
+            labels += case_labels[min_z:max_z + 1]
 
             assert len(imgs) == len(labels)
             self.case_indices.append(len(imgs))
@@ -175,10 +191,14 @@ class KiTS19(data.Dataset):
             img_path = self.imgs[i]
             img = np.load(str(img_path))
             imgs.append(img)
+
+        roi = self.rois[f'case_{case_i:05d}']
         img = np.stack(imgs, axis=2)
+        img = img[roi['min_y']:roi['max_y'], roi['min_x']:roi['max_x'], :]
 
         label_path = self.labels[idx]
         label = np.load(str(label_path))
+        label = label[roi['min_y']:roi['max_y'], roi['min_x']:roi['max_x']]
 
         data = {'image': img, 'label': label}
         if idx in self.train_indices and self.train_transform is not None:
@@ -230,10 +250,10 @@ class kits19_transform:
 if __name__ == '__main__':
     root = Path('../data')
 
-    dataset = KiTS19(root=root, stack_num=3, valid_rate=0.3,
-                     train_transform=None,
-                     valid_transform=None,
-                     spec_classes=[0, 1, 2])
+    dataset = KiTS19_roi(root=root, stack_num=3, valid_rate=0.3,
+                         train_transform=None,
+                         valid_transform=None,
+                         spec_classes=[0, 1, 2])
 
     from torch.utils.data import DataLoader, SequentialSampler
     from utils.vis import imshow

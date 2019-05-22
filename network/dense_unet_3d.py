@@ -44,7 +44,7 @@ class _Transition(nn.Sequential):
 
 
 class DenseNet3D(nn.Module):
-    def __init__(self, in_ch, growth_rate=32, block_config=(3, 4, 12, 8),
+    def __init__(self, in_ch, growth_rate=36, block_config=(6, 12, 36, 24),
                  num_init_features=96, bn_size=4, drop_rate=0, num_classes=1000):
 
         super(DenseNet3D, self).__init__()
@@ -103,9 +103,9 @@ class DenseUNet3D(nn.Module):
         self.transition3 = backbone[9]
         self.denseblock4 = backbone[10]
         self.bn = backbone[11]
-        self.up1 = _Up(x1_ch=504, x2_ch=496, out_ch=504)
-        self.up2 = _Up(x1_ch=504, x2_ch=224, out_ch=224)
-        self.up3 = _Up(x1_ch=224, x2_ch=192, out_ch=192)
+        self.up1 = _Up(x1_ch=1659, x2_ch=1590, out_ch=504)
+        self.up2 = _Up(x1_ch=504, x2_ch=588, out_ch=224)
+        self.up3 = _Up(x1_ch=224, x2_ch=312, out_ch=192)
         self.up4 = _Up(x1_ch=192, x2_ch=96, out_ch=96, scale_factor=(2, 2, 2))
         self.up5 = nn.Sequential(
             _Interpolate(scale_factor=(2, 2, 2)),
@@ -154,9 +154,9 @@ class _Up(nn.Module):
         self.up = _Interpolate(scale_factor=scale_factor)
         self.conv1x1 = nn.Conv3d(in_channels=x2_ch, out_channels=x1_ch, kernel_size=1)
         self.conv = nn.Sequential(
-            nn.BatchNorm3d(num_features=x1_ch),
-            nn.ReLU(inplace=True),
-            nn.Conv3d(in_channels=x1_ch, out_channels=out_ch, kernel_size=3, padding=1)
+            nn.Conv3d(in_channels=x1_ch, out_channels=out_ch, kernel_size=3, padding=1),
+            nn.BatchNorm3d(num_features=out_ch),
+            nn.ReLU(inplace=True)
         )
 
     def forward(self, x1, x2):
@@ -169,5 +169,6 @@ class _Up(nn.Module):
 
 if __name__ == '__main__':
     from torchsummary import summary
-    net = DenseUNet3D().cuda()
-    summary(net, (3, 224, 224, 12))
+
+    net = DenseUNet3D(in_ch=4).cuda()
+    summary(net, (4, 224, 224, 12))
