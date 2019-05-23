@@ -205,9 +205,11 @@ def training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch
         feat_2d = torch.stack(feat_2d_list, dim=-1)
         input_concat = torch.cat((imgs, outputs_2d), dim=1)
 
-        outputs = net(input_concat, feat_2d)
+        feat_3d, cls_3d, outputs = net(input_concat, feat_2d)
 
-        loss = criterion(outputs, labels)
+        loss_3d = criterion(cls_3d, labels)
+        loss_hff = criterion(outputs, labels)
+        loss = loss_3d + loss_hff
         loss.backward()
         optimizer.step()
 
@@ -273,7 +275,7 @@ def evaluation(net, dense_unet_2d, dataset, batch_size, num_workers, vis_intvl, 
             feat_2d = torch.stack(feat_2d_list, dim=-1)
             input_concat = torch.cat((imgs, outputs_2d), dim=1)
 
-            outputs = net(input_concat, feat_2d)
+            feat_3d, cls_3d, outputs = net(input_concat, feat_2d)
             outputs = outputs.argmax(dim=1)
 
             np_labels = labels.cpu().detach().numpy()

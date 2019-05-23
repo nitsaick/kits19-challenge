@@ -67,9 +67,9 @@ class HybridNet(nn.Module):
         x7 = self.up3(x6, x1)
         x8 = self.up4(x7, x)
         feat_3d = self.up5(x8)
-        # cls = self.conv2(feat)
-        cls = self.hff(feat_2d, feat_3d)
-        return cls
+        cls_3d = self.conv2(feat_3d)
+        cls_hff = self.hff(feat_2d, feat_3d)
+        return feat_3d, cls_3d, cls_hff
 
 
 class _Interpolate(nn.Module):
