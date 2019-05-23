@@ -93,9 +93,6 @@ class ResUNet(nn.Module):
 
 
 if __name__ == '__main__':
-    net = ResUNet(in_ch=5, out_ch=3).cuda()
-
-    # net(torch.randn(1, 3, 224, 224))
     from torchsummary import summary
-
+    net = ResUNet(in_ch=5, out_ch=3).cuda()
     summary(net, (5, 320, 320))
