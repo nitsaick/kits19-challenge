@@ -75,7 +75,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
     start_epoch = 0
     if resume:
         cp_file = Path(resume)
-        net, optimizer, start_epoch = cp.load_params(net, optimizer, root=cp_file)
+        net, optimizer, start_epoch = cp.load_params(net, optimizer, root=str(cp_file))
 
     # weights = np.array([0.2, 1.2, 2.2], dtype=np.float32)
     # weights = torch.from_numpy(weights)
