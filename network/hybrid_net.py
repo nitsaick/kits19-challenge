@@ -22,7 +22,7 @@ class HybridFeatureFusionLayer(nn.Module):
 
 
 class HybridNet(nn.Module):
-    def __init__(self, in_ch):
+    def __init__(self, in_ch, out_ch=3):
         super(HybridNet, self).__init__()
         densenet3d = DenseNet3D(in_ch)
         backbone = list(list(densenet3d.children())[0].children())
@@ -47,9 +47,9 @@ class HybridNet(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv3d(in_channels=96, out_channels=64, kernel_size=3, padding=1)
         )
-        self.conv2 = nn.Conv3d(in_channels=64, out_channels=3, kernel_size=1)
+        self.conv2 = nn.Conv3d(in_channels=64, out_channels=out_ch, kernel_size=1)
 
-        self.hff = HybridFeatureFusionLayer(in_ch=64, out_ch=3)
+        self.hff = HybridFeatureFusionLayer(in_ch=64, out_ch=out_ch)
 
     def forward(self, x, feat_2d):
         x = self.conv1(x)

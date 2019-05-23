@@ -68,7 +68,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
                          valid_transform=valid_transform,
                          spec_classes=[0, 1, 2])
 
-    net = DenseUNet2D()
+    net = DenseUNet2D(out_ch=dataset.num_classes)
 
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
 

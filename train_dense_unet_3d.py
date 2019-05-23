@@ -72,7 +72,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, res
                          valid_transform=valid_transform,
                          spec_classes=[0, 1, 2])
 
-    net = DenseUNet3D(in_ch=4)
+    net = DenseUNet3D(in_ch=4, out_ch=dataset.num_classes)
 
     dense_unet_2d = DenseUNet2D()
     dense_unet_2d, _, _ = cp.load_params(dense_unet_2d, root=str(du2d_path))
@@ -122,6 +122,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, res
     valid_score = 0.0
     best_score = 0.0
     best_epoch = 0
+
+    dense_unet_2d = dense_unet_2d.eval()
 
     for epoch in range(start_epoch, epoch_num):
         epoch_str = f' Epoch {epoch + 1}/{epoch_num} '

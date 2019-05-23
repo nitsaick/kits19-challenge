@@ -3,7 +3,7 @@ from torchvision import models
 
 
 class DenseUNet2D(nn.Module):
-    def __init__(self):
+    def __init__(self, out_ch=3):
         super(DenseUNet2D, self).__init__()
         densenet = models.densenet161(pretrained=True)
         backbone = list(list(densenet.children())[0].children())
@@ -28,7 +28,7 @@ class DenseUNet2D(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(in_channels=96, out_channels=64, kernel_size=3, padding=1)
         )
-        self.conv2 = nn.Conv2d(in_channels=64, out_channels=3, kernel_size=1)
+        self.conv2 = nn.Conv2d(in_channels=64, out_channels=out_ch, kernel_size=1)
 
     def forward(self, x):
         x = self.conv1(x)
