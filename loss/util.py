@@ -43,10 +43,7 @@ def class2one_hot(seg: Tensor, C: int) -> Tensor:
         seg = seg.unsqueeze(dim=0)
     assert sset(seg, list(range(C)))
 
-    b, w, h = seg.shape  # type: Tuple[int, int, int]
-
     res = torch.stack([seg == c for c in range(C)], dim=1).type(torch.int32)
-    assert res.shape == (b, C, w, h)
     assert one_hot(res)
 
     return res
@@ -55,14 +52,8 @@ def class2one_hot(seg: Tensor, C: int) -> Tensor:
 def np_class2one_hot(seg: np.ndarray, C: int) -> np.ndarray:
     if len(seg.shape) == 2:  # Only w, h, used by the dataloader
         seg = np.expand_dims(seg, axis=0)
-    # assert sset(seg, list(range(C)))
-
-    b, w, h = seg.shape  # type: Tuple[int, int, int]
 
     res = np.stack([seg == c for c in range(C)], axis=1).astype(np.int32)
-    assert res.shape == (b, C, w, h)
-    # assert one_hot(res)
-
     return res
 
 
@@ -82,11 +73,11 @@ def one_hot2dist(seg: np.ndarray) -> np.ndarray:
 
     res = np.zeros_like(seg)
     for c in range(C):
-        posmask = seg[:,c].astype(np.bool)
+        posmask = seg[:, c].astype(np.bool)
 
         if posmask.any():
             negmask = ~posmask
-            res[:,c] = distance(negmask) * negmask - (distance(posmask) - 1) * posmask
+            res[:, c] = distance(negmask) * negmask - (distance(posmask) - 1) * posmask
 
     return res
 
@@ -96,15 +87,15 @@ if __name__ == '__main__':
     b = np_class2one_hot(a, 3)[0]
     c = one_hot2dist(b)
     d = b.copy()
-    d[0,...] = 0
-    d[1,...] = 0
+    d[0, ...] = 0
+    d[1, ...] = 0
     d[2, ...] = 1
 
     multipled = np.einsum('cwh,cwh->cwh', d, c)
 
     loss = multipled.mean()
 
-    d = (c + 437)/3.44 / 255
+    d = (c + 437) / 3.44 / 255
     from utils.vis import imshow
 
     imshow('b', b.transpose((1, 2, 0)) * 128, (1, 1))

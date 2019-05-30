@@ -19,7 +19,7 @@ class BoundaryLoss(nn.Module):
         pc = probs[:, self.idc, ...].type(torch.float32)
         dc = dist_maps[:, self.idc, ...].type(torch.float32)
 
-        multipled = einsum('bcwh,bcwh->bcwh', pc, dc)
+        multipled = einsum('bc...,bc...->bc...', pc, dc)
 
         loss = multipled.mean()
 

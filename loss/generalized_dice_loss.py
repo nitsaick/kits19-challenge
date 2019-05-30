@@ -18,9 +18,14 @@ class GeneralizedDiceLoss(nn.Module):
         pc = probs[:, self.idc, ...].type(torch.float32)
         tc = target[:, self.idc, ...].type(torch.float32)
 
-        w = 1 / ((einsum('bcwh->bc', tc).type(torch.float32) + 1e-10) ** 2)
-        intersection = w * einsum('bcwh,bcwh->bc', pc, tc)
-        union = w * (einsum('bcwh->bc', pc) + einsum('bcwh->bc', tc))
+        w = 1 / ((einsum('bc...->bc', tc).type(torch.float32) + 1e-10) ** 2)
+
+        if len(pc.shape) == 4:
+            intersection = w * einsum('bchw,bchw->bc', pc, tc)
+        elif len(pc.shape) == 5:
+            intersection = w * einsum('bchwd,bchwd->bc', pc, tc)
+
+        union = w * (einsum('bc...->bc', pc) + einsum('bc...->bc', tc))
 
         divided = 1 - (2 * intersection + 1e-10) / (union + 1e-10)
 
