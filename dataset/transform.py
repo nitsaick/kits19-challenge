@@ -11,7 +11,9 @@ from albumentations import (
     RandomBrightnessContrast,
     RandomGamma,
     RandomScale,
-    Resize
+    Resize,
+    OpticalDistortion,
+    ElasticTransform
 )
 
 
@@ -154,7 +156,7 @@ class MedicalTransform:
             aug = Compose_alb([
                 HorizontalFlip(p=0.5),
                 OneOf([
-                    GridDistortion(p=1),
+                    GridDistortion(p=1, border_mode=cv2.BORDER_CONSTANT),
                     # OpticalDistortion(p=1, distort_limit=1, shift_limit=10)
                 ], p=0.5),
                 RandomBrightnessContrast(p=0.5),
@@ -180,8 +182,10 @@ class MedicalTransform3D:
             aug = Compose_alb([
                 HorizontalFlip(p=0.5),
                 OneOf([
-                    GridDistortion(p=1),
-                    # OpticalDistortion(p=1, distort_limit=1, shift_limit=10)
+                    GridDistortion(p=1, border_mode=cv2.BORDER_CONSTANT),
+                    # OpticalDistortion(p=1, distort_limit=1, shift_limit=10, border_mode=cv2.BORDER_CONSTANT),
+                    # ElasticTransform(p=1, border_mode=cv2.BORDER_CONSTANT)
+
                 ], p=0.5),
                 RandomBrightnessContrast(p=0.5),
                 RandomGamma(p=0.5)
