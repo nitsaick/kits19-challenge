@@ -98,7 +98,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, hyb
     gpu_ids = [i for i in range(num_gpu)]
 
     print(f'{" Start training ":-^40s}\n')
-    msg = f'Net: {net.__class__.__name__}\n' + \
+    msg = f'Net: {net.__class__.__name__} + {dense_unet_2d.__class__.__name__}\n' + \
           f'Dataset: {dataset.__class__.__name__}\n' + \
           f'Epochs: {epoch_num}\n' + \
           f'Learning rate: {optimizer.param_groups[0]["lr"]}\n' + \
