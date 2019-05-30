@@ -125,8 +125,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
         net.train()
         torch.set_grad_enabled(True)
         try:
-            loss = training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl)
-            logger.add_scalar('loss', loss, epoch)
+            loss = training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger)
 
             if eval_intvl > 0 and (epoch + 1) % eval_intvl == 0:
                 net.eval()
@@ -158,7 +157,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
         print(f'Best score: {best_score:.5f}')
 
 
-def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl):
+def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger, epoch):
     sampler = RandomSampler(dataset.train_dataset)
 
     train_loader = DataLoader(dataset.train_dataset, batch_size=batch_size, sampler=sampler,
@@ -184,6 +183,8 @@ def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_work
         tbar.set_postfix(loss=f'{loss.item():.5f}')
 
     scheduler.step(loss.item())
+
+    logger.add_scalar('loss', loss.item(), epoch)
     return loss.item()
 
 

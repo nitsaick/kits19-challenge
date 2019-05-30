@@ -134,8 +134,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, hyb
         torch.set_grad_enabled(True)
         try:
             loss = training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch_size, num_workers,
-                            vis_intvl)
-            logger.add_scalar('loss', loss, epoch)
+                            vis_intvl, logger, epoch)
 
             if eval_intvl > 0 and (epoch + 1) % eval_intvl == 0:
                 net.eval()
@@ -176,7 +175,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, hyb
         print(f'Best score: {best_score:.5f}')
 
 
-def training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl):
+def training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger, epoch):
     sampler = RandomSampler(dataset.train_dataset)
 
     train_loader = DataLoader(dataset.train_dataset, batch_size=batch_size, sampler=sampler,
@@ -239,6 +238,8 @@ def training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch
         tbar.set_postfix(loss=f'{loss.item():.5f}')
 
     scheduler.step(loss.item())
+
+    logger.add_scalar('loss', loss.item(), epoch)
     return loss.item()
 
 

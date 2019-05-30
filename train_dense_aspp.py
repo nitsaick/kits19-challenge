@@ -184,7 +184,7 @@ def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_work
 
     scheduler.step(loss.item())
 
-    logger.add_scalar('loss', loss, epoch)
+    logger.add_scalar('loss', loss.item(), epoch)
     return loss.item()
 
 
