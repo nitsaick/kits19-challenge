@@ -198,13 +198,19 @@ class KiTS19_vol(data.Dataset):
 
         imgs = []
         labels = []
+        roi_range = 15
         for img_path, label_path in zip(self.imgs[idx], self.labels[idx]):
             img = np.load(str(img_path))
-            img = img[roi['min_y']:roi['max_y'], roi['min_x']:roi['max_x']]
+            min_y = max(0, roi['min_y']-roi_range)
+            max_y = min(img.shape[0], roi['max_y']+roi_range)
+            min_x = max(0, roi['min_x']-roi_range)
+            max_x = min(img.shape[1], roi['max_x']+roi_range)
+
+            img = img[min_y:max_y, min_x:max_x]
             imgs.append(img)
 
             label = np.load(str(label_path))
-            label = label[roi['min_y']:roi['max_y'], roi['min_x']:roi['max_x']]
+            label = label[min_y:max_y, min_x:max_x]
             labels.append(label)
 
         if len(imgs) != self.slice_num:
@@ -264,11 +270,22 @@ class kits19_transform:
 
 
 if __name__ == '__main__':
+    from dataset.transform import Compose, PadAndResize, MedicalTransform3D
+
     root = Path('../data')
 
+    train_transform = Compose([
+        PadAndResize(output_size=224, type='train'),
+        MedicalTransform3D(type='train')
+    ])
+    valid_transform = Compose([
+        PadAndResize(output_size=224, type='valid'),
+        MedicalTransform3D(type='valid')
+    ])
+
     dataset = KiTS19_vol(root=root, slice_num=12, valid_rate=0.3,
-                         train_transform=None,
-                         valid_transform=None,
+                         train_transform=train_transform,
+                         valid_transform=valid_transform,
                          spec_classes=[0, 1, 2])
 
     from torch.utils.data import DataLoader, SequentialSampler
@@ -281,4 +298,4 @@ if __name__ == '__main__':
     for batch_idx, (imgs, labels, idx) in enumerate(data_loader):
         for i in range(imgs.shape[4]):
             img, label, _ = dataset.vis_transform(imgs=imgs[:, :, :, :, i], labels=labels[:, :, :, i], preds=None)
-            imshow(title='kits19', imgs=(img[0], label[0]))
+            imshow(title='kits19', imgs=(img[0], label[0]),subtitle=f'{i}')
