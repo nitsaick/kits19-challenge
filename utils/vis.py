@@ -6,7 +6,7 @@ def numpy_to_plt(img):
     return img.transpose((1, 2, 0))
 
 
-def imshow(title, imgs, shape=None, subtitle=None, cmap=None, transpose=False):
+def imshow(title, imgs, shape=None, subtitle=None, cmap=None, transpose=False, pause=0.001, pltshow=True):
     if type(imgs) is tuple:
         num = len(imgs)
         if shape is not None:
@@ -54,12 +54,17 @@ def imshow(title, imgs, shape=None, subtitle=None, cmap=None, transpose=False):
         plt.suptitle(title)
         plt.title(subtitle)
         plt.imshow(imgs, cmap)
-    
-    plt.ion()
-    plt.show()
-    plt.pause(0.001)
+
+    if pltshow:
+        plt.ion()
+        plt.show()
+        plt.pause(pause)
+
+    return plt.gcf()
 
 
 if __name__ == '__main__':
     img = torch.rand(50, 50)
-    imshow('Test', (img, img, img, img), (2, 2), ('a', 'b', 'c', 'd'))
+    fig = imshow('Test', (img, img, img, img), (2, 2), ('a', 'b', 'c', 'd'))
+    fig.savefig('test.png')
+    ...
