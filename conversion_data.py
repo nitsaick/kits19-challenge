@@ -1,7 +1,9 @@
+import click
 import nibabel as nib
 import numpy as np
 from pathlib2 import Path
 from tqdm import tqdm
+
 
 def normalize(volume):
     DEFAULT_HU_MAX = 512
@@ -15,14 +17,16 @@ def normalize(volume):
     return volume_norm
 
 
-def conversion_nii2npy(root, output=None):
-    root = Path(root)
-    if output is None:
-        output = Path(root)
-    else:
-        output = Path(output)
+@click.command()
+@click.option('-d', '--data', help='kits19 data path',
+              type=click.Path(exists=True, dir_okay=True, resolve_path=True), required=True)
+@click.option('-o', '--output', help='output npy file path',
+              type=click.Path(dir_okay=True, resolve_path=True), required=True)
+def conversion_nii2npy(data, output):
+    data = Path(data)
+    output = Path(output)
 
-    cases = sorted([d for d in root.iterdir() if d.is_dir()])
+    cases = sorted([d for d in data.iterdir() if d.is_dir()])
     for case in tqdm(cases):
         vol = nib.load(str(case / 'imaging.nii.gz')).get_data()
         vol = normalize(vol)
@@ -43,4 +47,4 @@ def conversion_nii2npy(root, output=None):
 
 
 if __name__ == '__main__':
-    conversion_nii2npy('kits19/data', 'data')
+    conversion_nii2npy()
