@@ -59,7 +59,7 @@ class KiTS19_roi(data.Dataset):
             case_imgs = sorted(list(imaging_dir.glob('*.npy')))
             case_labels = sorted(list(segmentation_dir.glob('*.npy')))
 
-            roi = self.rois[f'case_{i:05d}']
+            roi = self.rois[f'case_{i:05d}']['kidney']
             min_z = max(0, roi['min_z'] - roi_d)
             max_z = min(len(case_imgs) - 1, roi['max_z'] + roi_d)
 
@@ -192,7 +192,7 @@ class KiTS19_roi(data.Dataset):
             img = np.load(str(img_path))
             imgs.append(img)
 
-        roi = self.rois[f'case_{case_i:05d}']
+        roi = self.rois[f'case_{case_i:05d}']['kidney']
         img = np.stack(imgs, axis=2)
         img = img[roi['min_y']:roi['max_y'], roi['min_x']:roi['max_x'], :]
 

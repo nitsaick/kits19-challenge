@@ -59,7 +59,7 @@ class KiTS19_vol(data.Dataset):
             case_imgs = sorted(list(imaging_dir.glob('*.npy')))
             case_labels = sorted(list(segmentation_dir.glob('*.npy')))
 
-            roi = self.rois[f'case_{i:05d}']
+            roi = self.rois[f'case_{i:05d}']['kidney']
             min_z = max(0, roi['min_z'] - roi_d)
             max_z = min(len(case_imgs) - 1, roi['max_z'] + roi_d)
 
@@ -126,9 +126,11 @@ class KiTS19_vol(data.Dataset):
         return np.array(spec_cmap)
 
     def idx_to_name(self, idx):
-        path = self.imgs[idx]
-        name = Path(path.parts[-3]) / Path(path.parts[-1][:-4])
-        return name
+        paths = self.imgs[idx]
+        names = []
+        for path in paths:
+            names.append(Path(path.parts[-3]) / Path(path.parts[-1][:-4]))
+        return names
 
     def vis_transform(self, imgs=None, labels=None, preds=None, to_plt=False):
         cmap = self.get_colormap()
@@ -194,7 +196,7 @@ class KiTS19_vol(data.Dataset):
                 case_i = i
                 break
 
-        roi = self.rois[f'case_{case_i:05d}']
+        roi = self.rois[f'case_{case_i:05d}']['kidney']
 
         imgs = []
         labels = []
