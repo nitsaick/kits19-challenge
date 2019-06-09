@@ -83,10 +83,10 @@ def one_hot2dist(seg: np.ndarray) -> np.ndarray:
 
 
 if __name__ == '__main__':
-    a = np.load('D:/Qsync/workspace/kits19-challege/data/case_00000/segmentation/296.npy')
-    b = np_class2one_hot(a, 3)[0]
-    c = one_hot2dist(b)
-    d = b.copy()
+    a = np.load('../data/case_00000/segmentation/296.npy')
+    b = np_class2one_hot(a, 3)
+    c = one_hot2dist(b)[0]
+    d = b[0].copy()
     d[0, ...] = 0
     d[1, ...] = 0
     d[2, ...] = 1
@@ -98,10 +98,10 @@ if __name__ == '__main__':
     d = (c + 437) / 3.44 / 255
     from utils.vis import imshow
 
-    imshow('b', b.transpose((1, 2, 0)) * 128, (1, 1))
-    imshow('c', c.transpose((1, 2, 0)), (1, 1))
-    imshow('c1', c[0], (1, 1))
-    imshow('c2', c[1], (1, 1))
-    imshow('c3', c[2], (1, 1))
-    imshow('d', d.transpose((1, 2, 0)), (1, 1))
+    # imshow('b', b[0].transpose((1, 2, 0)) * 128, (1, 1))
+    # imshow('c', c.transpose((1, 2, 0)), (1, 1))
+    imshow('c0', c[0], (1, 1))
+    imshow('c1', c[1], (1, 1))
+    imshow('c2', c[2], (1, 1))
+    # imshow('d', d.transpose((1, 2, 0)), (1, 1))
     ...
