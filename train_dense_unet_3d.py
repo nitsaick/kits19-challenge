@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 import utils.checkpoint as cp
 from dataset import KiTS19_vol
-from dataset.transform import Compose, PadAndResize, MedicalTransform3D
+from dataset.transform import Compose, MedicalTransform2
 from network import DenseUNet2D, DenseUNet3D
 from utils.metrics import Evaluator
 from utils.vis import imshow
@@ -60,14 +60,12 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, res
         cp_path.mkdir(parents=True)
 
     train_transform = Compose([
-        PadAndResize(output_size=224, type='train'),
-        MedicalTransform3D(type='train')
+        MedicalTransform2(output_size=512, type='train'),
     ])
     valid_transform = Compose([
-        PadAndResize(output_size=224, type='valid'),
-        MedicalTransform3D(type='valid')
+        MedicalTransform2(output_size=512, type='valid'),
     ])
-    dataset = KiTS19_vol(data_path, slice_num=12, valid_rate=0.3,
+    dataset = KiTS19_vol(data_path, slice_num=4, valid_rate=0.3,
                          train_transform=train_transform,
                          valid_transform=valid_transform,
                          spec_classes=[0, 1, 2])

@@ -194,13 +194,13 @@ class KiTS19_roi(data.Dataset):
 
         roi = self.rois[f'case_{case_i:05d}']['kidney']
         img = np.stack(imgs, axis=2)
-        img = img[roi['min_y']:roi['max_y'], roi['min_x']:roi['max_x'], :]
+        # img = img[roi['min_y']:roi['max_y'], roi['min_x']:roi['max_x'], :]
 
         label_path = self.labels[idx]
         label = np.load(str(label_path))
-        label = label[roi['min_y']:roi['max_y'], roi['min_x']:roi['max_x']]
+        # label = label[roi['min_y']:roi['max_y'], roi['min_x']:roi['max_x']]
 
-        data = {'image': img, 'label': label}
+        data = {'image': img, 'label': label, 'roi': roi}
         if idx in self.train_indices and self.train_transform is not None:
             data = self.train_transform(data)
         elif idx in self.valid_indices and self.valid_transform is not None:
