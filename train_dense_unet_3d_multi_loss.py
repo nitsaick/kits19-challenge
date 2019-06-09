@@ -242,10 +242,10 @@ def training(net, dense_unet_2d, dataset, celoss, gdloss, bdloss, optimizer, sch
 
     scheduler.step(loss.item())
 
-    logger.add_scalar('loss', loss.item(), epoch)
-    logger.add_scalar('celoss', loss1.item(), epoch)
-    logger.add_scalar('gdloss', loss2.item(), epoch)
-    logger.add_scalar('bdloss', loss3.item(), epoch)
+    logger.add_scalar('loss/total', loss.item(), epoch)
+    logger.add_scalar('loss/celoss', loss1.item(), epoch)
+    logger.add_scalar('loss/gdloss', loss2.item(), epoch)
+    logger.add_scalar('loss/bdloss', loss3.item(), epoch)
     return loss.item()
 
 

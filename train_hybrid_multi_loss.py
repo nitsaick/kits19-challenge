@@ -248,13 +248,13 @@ def training(net, dense_unet_2d, dataset, celoss, gdloss, bdloss, optimizer, sch
 
     scheduler.step(loss.item())
 
-    logger.add_scalar('loss', loss.item(), epoch)
-    logger.add_scalar('celoss_3d', loss1_3d.item(), epoch)
-    logger.add_scalar('gdloss_3d', loss2_3d.item(), epoch)
-    logger.add_scalar('bdloss_3d', loss3_3d.item(), epoch)
-    logger.add_scalar('celoss_hff', loss1_hff.item(), epoch)
-    logger.add_scalar('gdloss_hff', loss2_hff.item(), epoch)
-    logger.add_scalar('bdloss_hff', loss3_hff.item(), epoch)
+    logger.add_scalar('loss/total', loss.item(), epoch)
+    logger.add_scalar('loss/celoss_3d', loss1_3d.item(), epoch)
+    logger.add_scalar('loss/gdloss_3d', loss2_3d.item(), epoch)
+    logger.add_scalar('loss/bdloss_3d', loss3_3d.item(), epoch)
+    logger.add_scalar('loss/celoss_hff', loss1_hff.item(), epoch)
+    logger.add_scalar('loss/gdloss_hff', loss2_hff.item(), epoch)
+    logger.add_scalar('loss/bdloss_hff', loss3_hff.item(), epoch)
     return loss.item()
 
 
