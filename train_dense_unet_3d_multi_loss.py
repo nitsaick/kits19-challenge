@@ -168,6 +168,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, res
             cp_file = cp_path / 'best.pth'
             cp.save(epoch, net.module, optimizer, str(cp_file))
             print('Update best acc!')
+            logger.add_scalar('best epoch', best_epoch + 1, 0)
+            logger.add_scalar('best score', best_score, 0)
 
         if (epoch + 1) % cp_intvl == 0:
             cp_file = cp_path / f'cp_{epoch + 1:03d}.pth'
