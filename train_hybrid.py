@@ -212,6 +212,7 @@ def training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch
 
         loss_3d = criterion(cls_3d, labels)
         loss_hff = criterion(outputs, labels)
+        
         loss = loss_3d + loss_hff
         loss.backward()
         optimizer.step()
@@ -228,7 +229,9 @@ def training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch
 
     scheduler.step(loss.item())
 
-    logger.add_scalar('loss', loss.item(), epoch)
+    logger.add_scalar('loss/total', loss.item(), epoch)
+    logger.add_scalar('loss/3d', loss_3d.item(), epoch)
+    logger.add_scalar('loss/hff', loss_hff.item(), epoch)
     return loss.item()
 
 
