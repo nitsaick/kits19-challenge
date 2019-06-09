@@ -1,3 +1,5 @@
+import multiprocessing as mp
+
 import click
 import torch
 from pathlib2 import Path
@@ -8,7 +10,7 @@ import utils.checkpoint as cp
 from dataset import KiTS19_vol
 from dataset.transform import Compose, PadAndResize, MedicalTransform3D
 from network import DenseUNet2D, HybridNet
-from utils.vis import imshow
+from utils.vis import Plot
 from utils.vis_boundary import vis_boundary
 
 
@@ -78,6 +80,7 @@ def evaluation(net, dense_unet_2d, dataset, batch_size, num_workers, output_path
     data_loader = DataLoader(subset, batch_size=batch_size, sampler=sampler,
                              num_workers=num_workers, pin_memory=True)
 
+    vol_case_i = 0
     with tqdm(total=len(case) - 1, ascii=True, desc=f'eval/{type:5}', dynamic_ncols=True) as pbar:
         for batch_idx, (imgs, labels, idx) in enumerate(data_loader):
             imgs = imgs.cuda()
@@ -110,22 +113,42 @@ def evaluation(net, dense_unet_2d, dataset, batch_size, num_workers, output_path
 
             outputs = outputs.argmax(dim=1)
 
+            idx = idx.numpy()
+            np_imgs = imgs.cpu().detach().numpy()
             np_labels = labels.cpu().detach().numpy()
             np_outputs = outputs.cpu().detach().numpy()
-            np_imgs = imgs.cpu().detach().numpy()
 
-            idx = idx.numpy()[0]
-            names = dataset.idx_to_name(idx)
+            while vol_case_i < len(case) - 1 and idx[-1] >= case[vol_case_i + 1] - 1:
+                vol_case_i += 1
+                pbar.update(1)
 
-            for i in range(len(names)):
-                output_file = output_path / f'{names[i]}.png'
-                if not output_file.parent.exists():
-                    output_file.parent.mkdir(parents=True)
+            # mp.freeze_support()
 
-                vis_img = vis_boundary(np_imgs[0, 0, :, :, i], np_labels[0, :, :, i], np_outputs[0, :, :, i], 3)
-                fig = imshow(title=type, imgs=(np_imgs[0, 0, :, :, i], vis_img[0], vis_img[1]), shape=(1, 3),
-                             subtitle=('image', 'cls0', 'cls1'))
-                fig.savefig(str(output_file))
+            names_list = [dataset.idx_to_name(idx_) for idx_ in idx]
+            output_path_list = [output_path] * len(names_list)
+            type_list = [type] * len(names_list)
+
+            pool = mp.Pool()
+            pool.map(output_img, zip(names_list, type_list, np_imgs, np_labels, np_outputs, output_path_list))
+            pool.close()
+            pool.join()
+
+
+def output_img(data):
+    names, type, imgs, labels, outputs, output_path = data
+    plot = Plot(type, (1, 3), ('image', 'cls0', 'cls1'))
+    for i in range(len(names)):
+        output_file = output_path / f'{names[i]}.png'
+        if not output_file.parent.exists():
+            try:
+                output_file.parent.mkdir(parents=True)
+            except FileExistsError:
+                pass
+
+        vis_img = vis_boundary(imgs[0, :, :, i], labels[:, :, i], outputs[:, :, i], 3)
+        plot.set_img((imgs[0, :, :, i], vis_img[0], vis_img[1]))
+        # plot.show()
+        plot.save(str(output_file), dpi=200)
 
 
 if __name__ == '__main__':
