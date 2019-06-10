@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from tqdm import tqdm
 
 import utils.checkpoint as cp
-from dataset import KiTS19_roi
+from dataset import KiTS19
 from dataset.transform import Compose, MedicalTransform2
 from network import DenseUNet2D
 from utils.metrics import Evaluator
@@ -56,15 +56,15 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
         cp_path.mkdir(parents=True)
 
     train_transform = Compose([
-        MedicalTransform2(output_size=512, type='train')
+        MedicalTransform2(output_size=512, type='train', use_roi=False)
     ])
     valid_transform = Compose([
-        MedicalTransform2(output_size=512, type='valid')
+        MedicalTransform2(output_size=512, type='valid', use_roi=False)
     ])
-    dataset = KiTS19_roi(data_path, stack_num=3, valid_rate=0.3,
-                         train_transform=train_transform,
-                         valid_transform=valid_transform,
-                         spec_classes=[0, 1, 2])
+    dataset = KiTS19(data_path, stack_num=3, valid_rate=0.3,
+                     train_transform=train_transform,
+                     valid_transform=valid_transform,
+                     spec_classes=[0, 1, 2])
 
     net = DenseUNet2D(out_ch=dataset.num_classes)
 
@@ -123,7 +123,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
         net.train()
         torch.set_grad_enabled(True)
         try:
-            loss = training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger, epoch)
+            loss = training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger,
+                            epoch)
 
             if eval_intvl > 0 and (epoch + 1) % eval_intvl == 0:
                 net.eval()
