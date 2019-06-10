@@ -4,6 +4,7 @@ import click
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from pathlib2 import Path
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
@@ -12,6 +13,8 @@ from tqdm import tqdm
 import utils.checkpoint as cp
 from dataset import KiTS19_vol
 from dataset.transform import Compose, MedicalTransform2
+from loss import GeneralizedDiceLoss
+from loss.util import class2one_hot
 from network import DenseUNet2D, HybridNet
 from utils.metrics import Evaluator
 from utils.vis import imshow
@@ -85,7 +88,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, res
     # weights = np.array([0.2, 1.2, 2.2], dtype=np.float32)
     # weights = torch.from_numpy(weights)
     weights = None
-    criterion = nn.CrossEntropyLoss(weight=weights)
+    celoss = nn.CrossEntropyLoss(weight=weights)
+    gdloss = GeneralizedDiceLoss(idc=[0, 1, 2])
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.1, patience=5, verbose=True,
@@ -110,7 +114,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, res
     # to GPU device
     net = torch.nn.DataParallel(net, device_ids=gpu_ids).cuda()
     dense_unet_2d = torch.nn.DataParallel(dense_unet_2d, device_ids=gpu_ids).cuda()
-    criterion = criterion.cuda()
+    celoss = celoss.cuda()
     for state in optimizer.state.values():
         for k, v in state.items():
             if isinstance(v, torch.Tensor):
@@ -133,7 +137,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, res
         net.train()
         torch.set_grad_enabled(True)
         try:
-            loss = training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch_size, num_workers,
+            loss = training(net, dense_unet_2d, dataset, celoss, gdloss, optimizer, scheduler, batch_size, num_workers,
                             vis_intvl, logger, epoch)
 
             if eval_intvl > 0 and (epoch + 1) % eval_intvl == 0:
@@ -170,7 +174,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, res
         print(f'Best score: {best_score:.5f}')
 
 
-def training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger, epoch):
+def training(net, dense_unet_2d, dataset, celoss, gdloss, optimizer, scheduler, batch_size, num_workers, vis_intvl,
+             logger, epoch):
     sampler = RandomSampler(dataset.train_dataset)
 
     train_loader = DataLoader(dataset.train_dataset, batch_size=batch_size, sampler=sampler,
@@ -208,10 +213,16 @@ def training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch
 
         feat_3d, cls_3d, outputs = net(input_concat, feat_2d)
 
-        loss_3d = criterion(cls_3d, labels)
-        loss_hff = criterion(outputs, labels)
-        
-        loss = loss_3d + loss_hff
+        loss_ce_3d = celoss(cls_3d, labels)
+        loss_ce_hff = celoss(outputs, labels)
+
+        cls_3d = F.softmax(cls_3d, dim=1)
+        outputs = F.softmax(outputs, dim=1)
+        labels_onehot = class2one_hot(labels, 3)
+        loss_gd_3d = gdloss(cls_3d, labels_onehot)
+        loss_gd_hff = gdloss(outputs, labels_onehot)
+
+        loss = loss_ce_3d + loss_ce_hff + loss_gd_3d + loss_gd_hff
         loss.backward()
         optimizer.step()
 
@@ -223,13 +234,16 @@ def training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch
             imshow(title='Train', imgs=(imgs[0], labels[0], outputs[0]), shape=(1, 3),
                    subtitle=('image', 'label', 'predict'))
 
-        tbar.set_postfix(loss=f'{loss.item():.5f}')
+        tbar.set_postfix(total=f'{loss.item():.5f}', ce_3d=f'{loss_ce_3d.item():.5f}', gd_3d=f'{loss_gd_3d.item():.5f}',
+                         ce_hff=f'{loss_ce_hff.item():.5f}', gd_hff=f'{loss_gd_hff.item():.5f}')
 
     scheduler.step(loss.item())
 
     logger.add_scalar('loss/total', loss.item(), epoch)
-    logger.add_scalar('loss/3d', loss_3d.item(), epoch)
-    logger.add_scalar('loss/hff', loss_hff.item(), epoch)
+    logger.add_scalar('loss/ce_3d', loss_ce_3d.item(), epoch)
+    logger.add_scalar('loss/ce_hff', loss_ce_hff.item(), epoch)
+    logger.add_scalar('loss/gd_3d', loss_gd_3d.item(), epoch)
+    logger.add_scalar('loss/gd_hff', loss_gd_hff.item(), epoch)
     return loss.item()
 
 

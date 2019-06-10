@@ -4,6 +4,7 @@ import click
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torch.nn as nn
 from pathlib2 import Path
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
@@ -80,7 +81,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
     # weights = np.array([0.2, 1.2, 2.2], dtype=np.float32)
     # weights = torch.from_numpy(weights)
     weights = None
-    criterion = GeneralizedDiceLoss(idc=[0, 1, 2])
+    celoss = nn.CrossEntropyLoss(weight=weights)
+    gdloss = GeneralizedDiceLoss(idc=[0, 1, 2])
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.1, patience=5, verbose=True,
@@ -104,7 +106,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
 
     # to GPU device
     net = torch.nn.DataParallel(net, device_ids=gpu_ids).cuda()
-    criterion = criterion.cuda()
+    celoss = celoss.cuda()
+    gdloss = gdloss.cuda()
     for state in optimizer.state.values():
         for k, v in state.items():
             if isinstance(v, torch.Tensor):
@@ -125,7 +128,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
         net.train()
         torch.set_grad_enabled(True)
         try:
-            loss = training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger,
+            loss = training(net, dataset, celoss, gdloss, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger,
                             epoch)
 
             if eval_intvl > 0 and (epoch + 1) % eval_intvl == 0:
@@ -160,7 +163,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
         print(f'Best score: {best_score:.5f}')
 
 
-def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger, epoch):
+def training(net, dataset, celoss, gdloss, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger, epoch):
     sampler = RandomSampler(dataset.train_dataset)
 
     train_loader = DataLoader(dataset.train_dataset, batch_size=batch_size, sampler=sampler,
@@ -173,10 +176,12 @@ def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_work
         imgs, labels = imgs.cuda(), labels.cuda()
         feat, outputs = net(imgs)
 
+        loss1 = celoss(outputs, labels)
         outputs = F.softmax(outputs, dim=1)
         labels_onehot = class2one_hot(labels, 3)
-        loss = criterion(outputs, labels_onehot)
+        loss2 = gdloss(outputs, labels_onehot)
 
+        loss = loss1 * 10 + loss2 * 0.1
         loss.backward()
         optimizer.step()
 
@@ -186,11 +191,13 @@ def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_work
             imshow(title='Train', imgs=(imgs[0][1], labels[0], outputs[0]), shape=(1, 3),
                    subtitle=('image', 'label', 'predict'))
 
-        tbar.set_postfix(loss=f'{loss.item():.5f}')
+        tbar.set_postfix(loss=f'{loss.item():.5f}', celoss=f'{loss1.item():.5f}', gdloss=f'{loss2.item():.5f}')
 
     scheduler.step(loss.item())
 
-    logger.add_scalar('loss', loss.item(), epoch)
+    logger.add_scalar('loss/total', loss.item(), epoch)
+    logger.add_scalar('loss/celoss', loss1.item(), epoch)
+    logger.add_scalar('loss/gdloss', loss2.item(), epoch)
     return loss.item()
 
 
