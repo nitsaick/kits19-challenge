@@ -77,7 +77,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, hyb
     dense_unet_2d = DenseUNet2D(out_ch=dataset.num_classes)
     dense_unet_2d, _, _ = cp.load_params(dense_unet_2d, root=str(du2d_path))
 
-    optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+    params = list(net.parameters()) + list(dense_unet_2d.parameters())
+    optimizer = torch.optim.SGD(params, lr=lr, momentum=0.9, weight_decay=0.0005)
 
     start_epoch = 0
 
