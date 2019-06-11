@@ -3,7 +3,7 @@ import sys
 import click
 import numpy as np
 import torch
-import torch.nn as nn
+import torch.nn.functional as F
 from pathlib2 import Path
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
@@ -12,6 +12,8 @@ from tqdm import tqdm
 import utils.checkpoint as cp
 from dataset import KiTS19_vol
 from dataset.transform import Compose, MedicalTransform2
+from loss import GeneralizedDiceLoss
+from loss.util import class2one_hot
 from network import DenseUNet2D, HybridNet
 from utils.metrics import Evaluator
 from utils.vis import imshow
@@ -60,10 +62,10 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, res
         cp_path.mkdir(parents=True)
 
     train_transform = Compose([
-        MedicalTransform2(output_size=512, type='train'),
+        MedicalTransform2(output_size=224, type='train'),
     ])
     valid_transform = Compose([
-        MedicalTransform2(output_size=512, type='valid'),
+        MedicalTransform2(output_size=224, type='valid'),
     ])
     dataset = KiTS19_vol(data_path, slice_num=4, valid_rate=0.3,
                          train_transform=train_transform,
@@ -85,7 +87,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, res
     # weights = np.array([0.2, 1.2, 2.2], dtype=np.float32)
     # weights = torch.from_numpy(weights)
     weights = None
-    criterion = nn.CrossEntropyLoss(weight=weights)
+    criterion = GeneralizedDiceLoss(idc=[0, 1, 2])
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.1, patience=5, verbose=True,
@@ -208,9 +210,14 @@ def training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch
 
         feat_3d, cls_3d, outputs = net(input_concat, feat_2d)
 
-        loss_3d = criterion(cls_3d, labels)
-        loss_hff = criterion(outputs, labels)
-        
+        labels_onehot = class2one_hot(labels, 3)
+
+        cls_3d = F.softmax(cls_3d, dim=1)
+        outputs = F.softmax(outputs, dim=1)
+
+        loss_3d = criterion(cls_3d, labels_onehot)
+        loss_hff = criterion(outputs, labels_onehot)
+
         loss = loss_3d + loss_hff
         loss.backward()
         optimizer.step()
