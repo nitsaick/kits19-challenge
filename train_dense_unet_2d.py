@@ -63,12 +63,14 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
     valid_transform = Compose([
         MedicalTransform2(output_size=512, type='valid')
     ])
-    dataset = KiTS19_roi(data_path, stack_num=3, valid_rate=0.3,
+
+    stack_num = 5
+    dataset = KiTS19_roi(data_path, stack_num=stack_num, valid_rate=0.3,
                          train_transform=train_transform,
                          valid_transform=valid_transform,
                          spec_classes=[0, 1, 2])
 
-    net = DenseUNet2D(out_ch=dataset.num_classes)
+    net = DenseUNet2D(in_ch=stack_num, out_ch=dataset.num_classes)
 
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
 
