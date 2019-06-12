@@ -64,7 +64,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
         MedicalTransform2(output_size=512, type='valid')
     ])
 
-    stack_num = 5
+    stack_num = 1
     dataset = KiTS19_roi(data_path, stack_num=stack_num, valid_rate=0.3,
                          train_transform=train_transform,
                          valid_transform=valid_transform,
@@ -185,7 +185,7 @@ def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_work
         if vis_intvl > 0 and batch_idx % vis_intvl == 0:
             outputs = outputs.cpu().detach().numpy().argmax(axis=1)
             imgs, labels, outputs = dataset.vis_transform(imgs, labels, outputs)
-            imshow(title='Train', imgs=(imgs[0][1], labels[0], outputs[0]), shape=(1, 3),
+            imshow(title='Train', imgs=(imgs[0][0], labels[0], outputs[0]), shape=(1, 3),
                    subtitle=('image', 'label', 'predict'))
 
         tbar.set_postfix(loss=f'{loss.item():.5f}')
