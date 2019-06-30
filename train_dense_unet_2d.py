@@ -61,7 +61,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
     valid_transform = Compose([
         MedicalTransform2(output_size=512, type='valid')
     ])
-    dataset = KiTS19_roi(data_path, stack_num=3, valid_rate=0.3,
+    dataset = KiTS19_roi(data_path, stack_num=3,
                          train_transform=train_transform,
                          valid_transform=valid_transform,
                          spec_classes=[0, 1, 2])
@@ -192,10 +192,10 @@ def evaluation(net, dataset, batch_size, num_workers, vis_intvl, logger, epoch, 
     type = type.lower()
     if type == 'train':
         subset = dataset.train_dataset
-        case = dataset.case_indices[dataset.split_case:]
+        case = dataset.case_indices[:dataset.split_case]
     elif type == 'valid':
         subset = dataset.valid_dataset
-        case = dataset.case_indices[:dataset.split_case + 1]
+        case = dataset.case_indices[dataset.split_case - 1:]
 
     vol_case_i = 0
     vol_label = []
@@ -248,7 +248,11 @@ def evaluation(net, dataset, batch_size, num_workers, vis_intvl, logger, epoch, 
         dc_each_case = acc['dc_each_case'][i]
         for j in range(len(dc_each_case)):
             dc = dc_each_case[j]
-            logger.add_scalar(f'{type}_each_case/{i:05d}/dc_{j}', dc, epoch)
+            if type == 'train':
+                case_idx = dataset.train_case[i]
+            elif type == 'valid':
+                case_idx = dataset.valid_case[i]
+            logger.add_scalar(f'{type}_each_case/{case_idx:05d}/dc_{j}', dc, epoch)
 
     score = (acc['dc_per_case_1'] + acc['dc_per_case_2']) / 2
     logger.add_scalar(f'{type}/score', score, epoch)
