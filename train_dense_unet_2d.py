@@ -14,6 +14,8 @@ import utils.checkpoint as cp
 from dataset import KiTS19_roi
 from dataset.transform import Compose, MedicalTransform2
 from network import DenseUNet2D, Discriminator
+from loss import GeneralizedDiceLoss
+from loss.util import class2one_hot
 from utils.metrics import Evaluator
 from utils.vis import imshow
 
@@ -86,9 +88,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume_gen, re
     # weights = np.array([0.2, 1.2, 2.2], dtype=np.float32)
     # weights = torch.from_numpy(weights)
     weights = None
-    criterion = nn.CrossEntropyLoss(weight=weights)
+    criterion = GeneralizedDiceLoss(idc=[0, 1, 2])
     criterion_gan = CGanLoss()
-    
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.1, patience=5, verbose=True,
         threshold=0.0001, threshold_mode='rel', cooldown=0, min_lr=0, eps=1e-08
@@ -202,6 +203,7 @@ def training(net, net_dis, dataset, criterion, criterion_gan, optimizer, optimiz
         dis_loss.backward()
         optimizer_dis.step()
 
+        labels_onehot = class2one_hot(labels, 3)
         # train G
         optimizer.zero_grad()
         feat, outputs, up1_cls, up2_cls, up3_cls, up4_cls = net(imgs)
@@ -211,9 +213,15 @@ def training(net, net_dis, dataset, criterion, criterion_gan, optimizer, optimiz
             up_labels = torch.unsqueeze(labels.float(), dim=1)
             up_labels = F.interpolate(up_labels, size=(h, w), mode='bilinear')
             up_labels = torch.squeeze(up_labels, dim=1).long()
-            losses.append(criterion(up_outputs, up_labels))
-        losses.append(criterion(outputs, labels))
+            up_outputs = F.softmax(up_outputs, dim=1)
+            up_labels_onehot = class2one_hot(up_labels, 3)
+            losses.append(criterion(up_outputs, up_labels_onehot))
+
         gen_loss = criterion_gan(imgs, labels, outputs, net_dis, dataset.num_classes, type='g')
+        
+        outputs = F.softmax(outputs, dim=1)
+        labels_onehot = class2one_hot(labels, 3)
+        losses.append(criterion(outputs, labels_onehot))
         
         loss = sum(losses) + gen_loss
         loss.backward()
