@@ -13,6 +13,8 @@ from tqdm import tqdm
 import utils.checkpoint as cp
 from dataset import KiTS19_roi
 from dataset.transform import Compose, MedicalTransform2
+from loss import GeneralizedDiceLoss
+from loss.util import class2one_hot
 from network import DenseUNet2D
 from utils.metrics import Evaluator
 from utils.vis import imshow
@@ -79,7 +81,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
     # weights = np.array([0.2, 1.2, 2.2], dtype=np.float32)
     # weights = torch.from_numpy(weights)
     weights = None
-    criterion = nn.CrossEntropyLoss(weight=weights)
+    criterion = GeneralizedDiceLoss(idc=[0, 1, 2])
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.1, patience=5, verbose=True,
@@ -178,9 +180,14 @@ def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_work
             up_labels = torch.unsqueeze(labels.float(), dim=1)
             up_labels = F.interpolate(up_labels, size=(h, w), mode='bilinear')
             up_labels = torch.squeeze(up_labels, dim=1).long()
-            losses.append(criterion(up_outputs, up_labels))
+            up_labels_onehot = class2one_hot(up_labels, 3)
+            up_outputs = F.softmax(up_outputs, dim=1)
+            losses.append(criterion(up_outputs, up_labels_onehot))
 
-        losses.append(criterion(outputs, labels))
+        labels_onehot = class2one_hot(labels, 3)
+        outputs = F.softmax(outputs, dim=1)
+        losses.append(criterion(outputs, labels_onehot))
+        
         loss = sum(losses)
         loss.backward()
         optimizer.step()
