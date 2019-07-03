@@ -4,6 +4,7 @@ import click
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from pathlib2 import Path
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
@@ -60,10 +61,10 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, du2d_path, res
         cp_path.mkdir(parents=True)
 
     train_transform = Compose([
-        MedicalTransform2(output_size=512, type='train'),
+        MedicalTransform2(output_size=224, type='train'),
     ])
     valid_transform = Compose([
-        MedicalTransform2(output_size=512, type='valid'),
+        MedicalTransform2(output_size=224, type='valid'),
     ])
     dataset = KiTS19_vol(data_path, slice_num=4, valid_rate=0.3,
                          train_transform=train_transform,
@@ -198,7 +199,7 @@ def training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch
         outputs_2d_list = []
         with torch.no_grad():
             for stack_img in stack_imgs:
-                feat_2d, outputs_2d = dense_unet_2d(stack_img)
+                feat_2d, outputs_2d, _, _, _, _ = dense_unet_2d(stack_img)
                 feat_2d_list.append(feat_2d.detach())
                 outputs_2d_list.append(outputs_2d.detach())
 
@@ -206,12 +207,22 @@ def training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch
         feat_2d = torch.stack(feat_2d_list, dim=-1)
         input_concat = torch.cat((imgs, outputs_2d), dim=1)
 
-        feat_3d, cls_3d, outputs = net(input_concat, feat_2d)
+        feat_3d, cls_3d, outputs, up1_cls, up2_cls, up3_cls, up4_cls = net(input_concat, feat_2d)
+
+        losses = []
+        for up_outputs in [up1_cls, up2_cls, up3_cls, up4_cls]:
+            b, c, h, w, d = up_outputs.shape
+            up_labels = torch.unsqueeze(labels.float(), dim=1)
+            up_labels = F.interpolate(up_labels, size=(h, w, d), mode='trilinear')
+            up_labels = torch.squeeze(up_labels, dim=1).long()
+            losses.append(criterion(up_outputs, up_labels))
 
         loss_3d = criterion(cls_3d, labels)
         loss_hff = criterion(outputs, labels)
-        
-        loss = loss_3d + loss_hff
+
+        losses.append(loss_3d)
+        losses.append(loss_hff)
+        loss = sum(losses)
         loss.backward()
         optimizer.step()
 
@@ -223,10 +234,14 @@ def training(net, dense_unet_2d, dataset, criterion, optimizer, scheduler, batch
             imshow(title='Train', imgs=(imgs[0], labels[0], outputs[0]), shape=(1, 3),
                    subtitle=('image', 'label', 'predict'))
 
-        tbar.set_postfix(loss=f'{loss.item():.5f}')
+        tbar.set_postfix(up1=f'{losses[0].item():.5f}', up2=f'{losses[1].item():.5f}', up3=f'{losses[2].item():.5f}',
+                         up4=f'{losses[3].item():.5f}', loss_3d=f'{losses[4].item():.5f}',
+                         loss_hff=f'{losses[5].item():.5f}', total=f'{loss.item():.5f}')
 
     scheduler.step(loss.item())
 
+    for i in range(4):
+        logger.add_scalar(f'loss/up{i + 1}', losses[i].item(), epoch)
     logger.add_scalar('loss/total', loss.item(), epoch)
     logger.add_scalar('loss/3d', loss_3d.item(), epoch)
     logger.add_scalar('loss/hff', loss_hff.item(), epoch)
@@ -273,7 +288,7 @@ def evaluation(net, dense_unet_2d, dataset, batch_size, num_workers, vis_intvl, 
             outputs_2d_list = []
             with torch.no_grad():
                 for stack_img in stack_imgs:
-                    feat_2d, outputs_2d = dense_unet_2d(stack_img)
+                    feat_2d, outputs_2d, _, _, _, _ = dense_unet_2d(stack_img)
                     feat_2d_list.append(feat_2d.detach())
                     outputs_2d_list.append(outputs_2d.detach())
 
@@ -281,7 +296,7 @@ def evaluation(net, dense_unet_2d, dataset, batch_size, num_workers, vis_intvl, 
             feat_2d = torch.stack(feat_2d_list, dim=-1)
             input_concat = torch.cat((imgs, outputs_2d), dim=1)
 
-            feat_3d, cls_3d, outputs = net(input_concat, feat_2d)
+            feat_3d, cls_3d, outputs, _, _, _, _ = net(input_concat, feat_2d)
             outputs = outputs.argmax(dim=1)
 
             np_labels = labels.cpu().detach().numpy()

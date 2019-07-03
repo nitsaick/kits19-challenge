@@ -4,6 +4,7 @@ import click
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from pathlib2 import Path
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
@@ -123,7 +124,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
         net.train()
         torch.set_grad_enabled(True)
         try:
-            loss = training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger, epoch)
+            loss = training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger,
+                            epoch)
 
             if eval_intvl > 0 and (epoch + 1) % eval_intvl == 0:
                 net.eval()
@@ -168,9 +170,18 @@ def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_work
         optimizer.zero_grad()
 
         imgs, labels = imgs.cuda(), labels.cuda()
-        feat, outputs = net(imgs)
+        feat, outputs, up1_cls, up2_cls, up3_cls, up4_cls = net(imgs)
 
-        loss = criterion(outputs, labels)
+        losses = []
+        for up_outputs in [up1_cls, up2_cls, up3_cls, up4_cls]:
+            b, c, h, w = up_outputs.shape
+            up_labels = torch.unsqueeze(labels.float(), dim=1)
+            up_labels = F.interpolate(up_labels, size=(h, w), mode='bilinear')
+            up_labels = torch.squeeze(up_labels, dim=1).long()
+            losses.append(criterion(up_outputs, up_labels))
+
+        losses.append(criterion(outputs, labels))
+        loss = sum(losses)
         loss.backward()
         optimizer.step()
 
@@ -180,11 +191,14 @@ def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_work
             imshow(title='Train', imgs=(imgs[0][1], labels[0], outputs[0]), shape=(1, 3),
                    subtitle=('image', 'label', 'predict'))
 
-        tbar.set_postfix(loss=f'{loss.item():.5f}')
+        tbar.set_postfix(up1=f'{losses[0].item():.5f}', up2=f'{losses[1].item():.5f}', up3=f'{losses[2].item():.5f}',
+                         up4=f'{losses[3].item():.5f}', up5=f'{losses[4].item():.5f}', loss=f'{loss.item():.5f}')
 
     scheduler.step(loss.item())
 
-    logger.add_scalar('loss', loss.item(), epoch)
+    for i in range(len(losses)):
+        logger.add_scalar(f'loss/up{i + 1}', losses[i].item(), epoch)
+    logger.add_scalar(f'loss/total', loss.item(), epoch)
     return loss.item()
 
 
@@ -210,7 +224,7 @@ def evaluation(net, dataset, batch_size, num_workers, vis_intvl, logger, epoch, 
     with tqdm(total=len(case) - 1, ascii=True, desc=f'eval/{type:5}', dynamic_ncols=True) as pbar:
         for batch_idx, (imgs, labels, idx) in enumerate(data_loader):
             imgs = imgs.cuda()
-            feat, outputs = net(imgs)
+            feat, outputs, _, _, _, _ = net(imgs)
             outputs = outputs.argmax(dim=1)
 
             np_labels = labels.cpu().detach().numpy()

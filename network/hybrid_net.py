@@ -51,6 +51,11 @@ class HybridNet(nn.Module):
 
         self.hff = HybridFeatureFusionLayer(in_ch=64, out_ch=out_ch)
 
+        self.up1_conv = nn.Conv3d(in_channels=504, out_channels=out_ch, kernel_size=1)
+        self.up2_conv = nn.Conv3d(in_channels=224, out_channels=out_ch, kernel_size=1)
+        self.up3_conv = nn.Conv3d(in_channels=192, out_channels=out_ch, kernel_size=1)
+        self.up4_conv = nn.Conv3d(in_channels=96, out_channels=out_ch, kernel_size=1)
+
     def forward(self, x, feat_2d):
         x = self.conv1(x)
         x_ = self.mp(x)
@@ -69,7 +74,12 @@ class HybridNet(nn.Module):
         feat_3d = self.up5(x8)
         cls_3d = self.conv2(feat_3d)
         cls_hff = self.hff(feat_2d, feat_3d)
-        return feat_3d, cls_3d, cls_hff
+
+        up1_cls = self.up1_conv(x5)
+        up2_cls = self.up2_conv(x6)
+        up3_cls = self.up3_conv(x7)
+        up4_cls = self.up4_conv(x8)
+        return feat_3d, cls_3d, cls_hff, up1_cls, up2_cls, up3_cls, up4_cls
 
 
 class _Interpolate(nn.Module):
