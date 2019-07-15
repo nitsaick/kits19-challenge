@@ -70,7 +70,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume_gen, re
                          spec_classes=[0, 1, 2])
     
     net = DenseUNet2D(out_ch=dataset.num_classes)
-    net_dis = Discriminator(in_ch=dataset.num_classes * 2)
+    net_dis = Discriminator(in_ch=dataset.num_classes)
     
     optimizer = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.5, 0.9))
     optimizer_dis = torch.optim.Adam(net_dis.parameters(), lr=lr, betas=(0.5, 0.9))

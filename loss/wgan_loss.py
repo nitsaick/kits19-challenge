@@ -16,16 +16,14 @@ class WGanLoss(nn.Module):
         
         labels = class2one_hot(labels, num_classes).type(torch.float32)
         
-        real_imgs = torch.cat([imgs, labels], dim=1)
-        real_outputs = discriminator(real_imgs)
+        real_outputs = discriminator(labels)
         
-        fake_imgs = torch.cat([imgs, outputs], dim=1)
-        fake_outputs = discriminator(fake_imgs)
+        fake_outputs = discriminator(outputs)
         
         if type == 'd':
             dis_loss = -real_outputs.mean() + fake_outputs.mean()
             if self.gradient_penalty:
-                dis_loss += self._gradient_penalty(discriminator, real_imgs, fake_imgs)
+                dis_loss += self._gradient_penalty(discriminator, labels, outputs)
             return dis_loss
         
         elif type == 'g':
