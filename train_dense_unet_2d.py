@@ -9,7 +9,7 @@ from pathlib2 import Path
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from tqdm import tqdm
-from loss import CGanLoss
+from loss import WGanLoss
 import utils.checkpoint as cp
 from dataset import KiTS19_roi
 from dataset.transform import Compose, MedicalTransform2
@@ -72,8 +72,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume_gen, re
     net = DenseUNet2D(out_ch=dataset.num_classes)
     net_dis = Discriminator(in_ch=dataset.num_classes * 2)
     
-    optimizer = torch.optim.Adam(net.parameters(), lr=lr)
-    optimizer_dis = torch.optim.Adam(net_dis.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.5, 0.9))
+    optimizer_dis = torch.optim.Adam(net_dis.parameters(), lr=lr, betas=(0.5, 0.9))
     
     start_epoch = 0
     if resume_gen:
@@ -87,7 +87,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume_gen, re
     # weights = torch.from_numpy(weights)
     weights = None
     criterion = nn.CrossEntropyLoss(weight=weights)
-    criterion_gan = CGanLoss()
+    criterion_gan = WGanLoss(gradient_penalty=True)
     
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.1, patience=5, verbose=True,
@@ -229,7 +229,7 @@ def training(net, net_dis, dataset, criterion, criterion_gan, optimizer, optimiz
                          up3=f'{losses[2].item():.5f}',
                          up4=f'{losses[3].item():.5f}', up5=f'{losses[4].item():.5f}',
                          dis=f'{dis_loss.item():.5f}', gen=f'{gen_loss.item():.5f}',
-                         loss=f'{loss.item():.5f}')
+                         seg=f'{sum(losses).item():.5f}')
     
     scheduler.step(loss.item())
     scheduler_dis.step(dis_loss.item())
