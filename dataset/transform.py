@@ -220,30 +220,27 @@ class MedicalTransform3D:
 
 
 class MedicalTransform2:
-    def __init__(self, output_size, type='train'):
+    def __init__(self, output_size, type='train', use_roi=True):
         if isinstance(output_size, (tuple, list)):
             self.output_size = output_size  # (h, w)
         else:
             self.output_size = (output_size, output_size)
-        
+
         self.type = type
-    
+        self.use_roi = use_roi
+
     def __call__(self, data):
         data = to_numpy(data)
-        
-        img, label, roi = data['image'], data['label'], data['roi']
-        
+        img, label = data['image'], data['label']
+
         is_3d = False
         if img.shape == 4 and label.shape == 3:
             is_3d = True
-        
-        roi_range = 15
+
         max_size = max(self.output_size[0], self.output_size[1])
-        
+
         if self.type == 'train':
-            aug = Compose_alb([
-                Crop(roi['min_x'] - roi_range, roi['min_y'] - roi_range,
-                     roi['max_x'] + roi_range, roi['max_y'] + roi_range, p=1),
+            task = [
                 HorizontalFlip(p=0.5),
                 RandomBrightnessContrast(p=0.5),
                 RandomGamma(p=0.5),
@@ -252,15 +249,22 @@ class MedicalTransform2:
                 PadIfNeeded(self.output_size[0], self.output_size[1], cv2.BORDER_CONSTANT, value=0, p=1),
                 ShiftScaleRotate(shift_limit=0.2, scale_limit=0.5, rotate_limit=30, border_mode=cv2.BORDER_CONSTANT,
                                  value=0, p=0.5)
-            ])
+            ]
         else:
-            aug = Compose_alb([
-                Crop(roi['min_x'] - roi_range, roi['min_y'] - roi_range,
-                     roi['max_x'] + roi_range, roi['max_y'] + roi_range, p=1),
+            task = [
                 LongestMaxSize(max_size, p=1),
                 PadIfNeeded(self.output_size[0], self.output_size[1], cv2.BORDER_CONSTANT, value=0, p=1),
-            ])
-            
+            ]
+
+        if self.use_roi:
+            assert 'roi' in data.keys()
+            roi = data['roi']
+            roi_range = 15
+            crop = [Crop(roi['min_x'] - roi_range, roi['min_y'] - roi_range,
+                         roi['max_x'] + roi_range, roi['max_y'] + roi_range, p=1), ]
+            task = crop + task
+
+        aug = Compose_alb(task)
         if is_3d:
             keys = {}
             targets = {}
@@ -270,24 +274,24 @@ class MedicalTransform2:
                 targets.update({f'image{i}': img[:, :, i]})
                 targets.update({f'mask{i}': label[:, :, i]})
             aug.add_targets(keys)
-    
+
             targets.update({'image': img[:, :, 0]})
             targets.update({'mask': label[:, :, 0]})
-    
+
             data = aug(**targets)
             imgs = [data['image']]
             labels = [data['mask']]
-    
+
             for i in range(1, img.shape[2]):
                 imgs.append(data[f'image{i}'])
                 labels.append(data[f'mask{i}'])
-    
+
             img = np.stack(imgs, axis=-1)
             label = np.stack(labels, axis=-1)
-            
+
         else:
             data = aug(image=img, mask=label)
             img, label = data['image'], data['mask']
-        
+
         data = {'image': img, 'label': label}
         return data

@@ -14,14 +14,14 @@ from dataset.transform import to_numpy
 
 
 class KiTS19(data.Dataset):
-    def __init__(self, root, stack_num=1, valid_rate=0.3,
+    def __init__(self, root, stack_num=1,
                  train_transform=None, valid_transform=None, spec_classes=None):
         self.root = Path(root)
         self.stack_num = stack_num
         self.train_transform = train_transform
         self.valid_transform = valid_transform
 
-        self.imgs, self.labels = self._get_img_list(self.root, valid_rate)
+        self.imgs, self.labels = self._get_img_list(self.root)
         self._split_subset()
 
         if spec_classes is None:
@@ -33,32 +33,56 @@ class KiTS19(data.Dataset):
         self._num_classes = len(self.get_classes_name())
         self._img_channels = self.__getitem__(0)[0].shape[0]
 
-    def _get_img_list(self, root, valid_rate):
+    def _get_img_list(self, root):
+        train_case_file = Path(root) / 'train.txt'
+        valid_case_file = Path(root) / 'val.txt'
+    
+        self.train_case = []
+        self.valid_case = []
+    
+        f = open(train_case_file, 'r')
+        for line in f:
+            self.train_case.append(int(line))
+    
+        f = open(valid_case_file, 'r')
+        for line in f:
+            self.valid_case.append(int(line))
+    
+        self.case = self.train_case + self.valid_case
+    
+        self.case_indices = [0, ]
+    
+        def read(root, cases, imgs, labels):
+            for case in cases:
+                case_root = root / f'case_{case:05d}'
+                imaging_dir = case_root / 'imaging'
+                segmentation_dir = case_root / 'segmentation'
+                assert imaging_dir.exists() and segmentation_dir.exists()
+            
+                case_imgs = sorted(list(imaging_dir.glob('*.npy')))
+                case_labels = sorted(list(segmentation_dir.glob('*.npy')))
+            
+                imgs += case_imgs
+                labels += case_labels
+            
+                assert len(imgs) == len(labels)
+                self.case_indices.append(len(imgs))
+        
+            return imgs, labels
+    
         imgs = []
         labels = []
-
-        cases = sorted([d for d in root.iterdir() if d.is_dir()])
-        self.split_case = int(np.round(len(cases) * valid_rate))
-        self.case_indices = [0, ]
-        split = 0
-        for i in range(len(cases)):
-            case = cases[i]
-            imaging_dir = case / 'imaging'
-            segmentation_dir = case / 'segmentation'
-            assert imaging_dir.exists() and segmentation_dir.exists()
-
-            imgs += sorted(list(imaging_dir.glob('*.npy')))
-            labels += sorted(list(segmentation_dir.glob('*.npy')))
-
-            assert len(imgs) == len(labels)
-            self.case_indices.append(len(imgs))
-            if case.stem[-3:] == f'{self.split_case - 1:03}':
-                split = len(imgs)
-
+    
+        read(root, self.train_case, imgs, labels)
+        split = len(imgs)
+        self.split_case = len(self.case_indices)
+    
+        read(root, self.valid_case, imgs, labels)
+    
         self.indices = list(range(len(imgs)))
-        self.train_indices = self.indices[split:]
-        self.valid_indices = self.indices[:split]
-
+        self.train_indices = self.indices[:split]
+        self.valid_indices = self.indices[split:]
+    
         return imgs, labels
 
     def _split_subset(self):
