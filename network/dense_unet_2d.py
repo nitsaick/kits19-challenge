@@ -96,4 +96,4 @@ class _Up(nn.Module):
 if __name__ == '__main__':
     from torchsummary import summary
     net = DenseUNet2D().cuda()
-    summary(net, (3, 224, 224))
+    summary(net, (3, 512, 512))
