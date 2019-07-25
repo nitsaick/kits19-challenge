@@ -4,6 +4,7 @@ import click
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from pathlib2 import Path
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
@@ -12,6 +13,8 @@ from tqdm import tqdm
 import utils.checkpoint as cp
 from dataset import KiTS19_roi
 from dataset.transform import Compose, MedicalTransform2
+from loss import GeneralizedDiceLoss
+from loss.util import class2one_hot
 from network import DenseUNet2D
 from utils.metrics import Evaluator
 from utils.vis import imshow
@@ -61,7 +64,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
     valid_transform = Compose([
         MedicalTransform2(output_size=512, type='valid')
     ])
-    dataset = KiTS19_roi(data_path, stack_num=3, valid_rate=0.3,
+    dataset = KiTS19_roi(data_path, stack_num=3,
                          train_transform=train_transform,
                          valid_transform=valid_transform,
                          spec_classes=[0, 1, 2])
@@ -78,7 +81,7 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
     # weights = np.array([0.2, 1.2, 2.2], dtype=np.float32)
     # weights = torch.from_numpy(weights)
     weights = None
-    criterion = nn.CrossEntropyLoss(weight=weights)
+    criterion = GeneralizedDiceLoss(idc=[0, 1, 2])
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.1, patience=5, verbose=True,
@@ -123,7 +126,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
         net.train()
         torch.set_grad_enabled(True)
         try:
-            loss = training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger, epoch)
+            loss = training(net, dataset, criterion, optimizer, scheduler, batch_size, num_workers, vis_intvl, logger,
+                            epoch)
 
             if eval_intvl > 0 and (epoch + 1) % eval_intvl == 0:
                 net.eval()
@@ -168,9 +172,23 @@ def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_work
         optimizer.zero_grad()
 
         imgs, labels = imgs.cuda(), labels.cuda()
-        feat, outputs = net(imgs)
+        feat, outputs, up1_cls, up2_cls, up3_cls, up4_cls = net(imgs)
 
-        loss = criterion(outputs, labels)
+        losses = []
+        for up_outputs in [up1_cls, up2_cls, up3_cls, up4_cls]:
+            b, c, h, w = up_outputs.shape
+            up_labels = torch.unsqueeze(labels.float(), dim=1)
+            up_labels = F.interpolate(up_labels, size=(h, w), mode='bilinear')
+            up_labels = torch.squeeze(up_labels, dim=1).long()
+            up_labels_onehot = class2one_hot(up_labels, 3)
+            up_outputs = F.softmax(up_outputs, dim=1)
+            losses.append(criterion(up_outputs, up_labels_onehot))
+
+        labels_onehot = class2one_hot(labels, 3)
+        outputs = F.softmax(outputs, dim=1)
+        losses.append(criterion(outputs, labels_onehot))
+        
+        loss = sum(losses)
         loss.backward()
         optimizer.step()
 
@@ -180,11 +198,14 @@ def training(net, dataset, criterion, optimizer, scheduler, batch_size, num_work
             imshow(title='Train', imgs=(imgs[0][1], labels[0], outputs[0]), shape=(1, 3),
                    subtitle=('image', 'label', 'predict'))
 
-        tbar.set_postfix(loss=f'{loss.item():.5f}')
+        tbar.set_postfix(up1=f'{losses[0].item():.5f}', up2=f'{losses[1].item():.5f}', up3=f'{losses[2].item():.5f}',
+                         up4=f'{losses[3].item():.5f}', up5=f'{losses[4].item():.5f}', loss=f'{loss.item():.5f}')
 
     scheduler.step(loss.item())
 
-    logger.add_scalar('loss', loss.item(), epoch)
+    for i in range(len(losses)):
+        logger.add_scalar(f'loss/up{i + 1}', losses[i].item(), epoch)
+    logger.add_scalar(f'loss/total', loss.item(), epoch)
     return loss.item()
 
 
@@ -192,10 +213,10 @@ def evaluation(net, dataset, batch_size, num_workers, vis_intvl, logger, epoch, 
     type = type.lower()
     if type == 'train':
         subset = dataset.train_dataset
-        case = dataset.case_indices[dataset.split_case:]
+        case = dataset.case_indices[:dataset.split_case]
     elif type == 'valid':
         subset = dataset.valid_dataset
-        case = dataset.case_indices[:dataset.split_case + 1]
+        case = dataset.case_indices[dataset.split_case - 1:]
 
     vol_case_i = 0
     vol_label = []
@@ -210,7 +231,7 @@ def evaluation(net, dataset, batch_size, num_workers, vis_intvl, logger, epoch, 
     with tqdm(total=len(case) - 1, ascii=True, desc=f'eval/{type:5}', dynamic_ncols=True) as pbar:
         for batch_idx, (imgs, labels, idx) in enumerate(data_loader):
             imgs = imgs.cuda()
-            feat, outputs = net(imgs)
+            feat, outputs, _, _, _, _ = net(imgs)
             outputs = outputs.argmax(dim=1)
 
             np_labels = labels.cpu().detach().numpy()
@@ -248,7 +269,11 @@ def evaluation(net, dataset, batch_size, num_workers, vis_intvl, logger, epoch, 
         dc_each_case = acc['dc_each_case'][i]
         for j in range(len(dc_each_case)):
             dc = dc_each_case[j]
-            logger.add_scalar(f'{type}_each_case/{i:05d}/dc_{j}', dc, epoch)
+            if type == 'train':
+                case_idx = dataset.train_case[i]
+            elif type == 'valid':
+                case_idx = dataset.valid_case[i]
+            logger.add_scalar(f'{type}_each_case/{case_idx:05d}/dc_{j}', dc, epoch)
 
     score = (acc['dc_per_case_1'] + acc['dc_per_case_2']) / 2
     logger.add_scalar(f'{type}/score', score, epoch)
