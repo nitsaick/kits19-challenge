@@ -63,10 +63,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
         RandomScaleCrop(output_size=512, scale_range=0.2, type='valid'),
         MedicalTransform(type='valid')
     ])
-    dataset = KiTS19(data_path, stack_num=5, valid_rate=0.3,
-                     train_transform=train_transform,
-                     valid_transform=valid_transform,
-                     spec_classes=[0, 1, 1])
+    dataset = KiTS19(data_path, stack_num=5, spec_classes=[0, 1, 1], train_transform=train_transform,
+                     valid_transform=valid_transform)
 
     net = ResUNet(in_ch=dataset.img_channels, out_ch=dataset.num_classes, base_ch=64)
 
