@@ -32,12 +32,12 @@ class DenseUNet2D(nn.Module):
             nn.Conv2d(in_channels=96, out_channels=64, kernel_size=3, padding=1)
         )
         self.conv2 = nn.Conv2d(in_channels=64, out_channels=out_ch, kernel_size=1)
-
+        
         self.up1_conv = nn.Conv2d(in_channels=768, out_channels=out_ch, kernel_size=1)
         self.up2_conv = nn.Conv2d(in_channels=384, out_channels=out_ch, kernel_size=1)
         self.up3_conv = nn.Conv2d(in_channels=96, out_channels=out_ch, kernel_size=1)
         self.up4_conv = nn.Conv2d(in_channels=96, out_channels=out_ch, kernel_size=1)
-
+    
     def forward(self, x):
         x = self.conv1(x)
         x_ = self.mp(x)
@@ -55,12 +55,12 @@ class DenseUNet2D(nn.Module):
         x8 = self.up4(x7, x)
         feat = self.up5(x8)
         cls = self.conv2(feat)
-
+        
         up1_cls = self.up1_conv(x5)
         up2_cls = self.up2_conv(x6)
         up3_cls = self.up3_conv(x7)
         up4_cls = self.up4_conv(x8)
-
+        
         return {'output': cls, 'up1_cls': up1_cls, 'up2_cls': up2_cls, 'up3_cls': up3_cls, 'up4_cls': up4_cls}
 
 
@@ -70,7 +70,7 @@ class _Interpolate(nn.Module):
         self.scale_factor = scale_factor
         self.mode = mode
         self.align_corners = align_corners
-
+    
     def forward(self, x):
         x = nn.functional.interpolate(x, scale_factor=self.scale_factor, mode=self.mode,
                                       align_corners=self.align_corners)
@@ -87,7 +87,7 @@ class _Up(nn.Module):
             nn.BatchNorm2d(num_features=out_ch),
             nn.ReLU(inplace=True)
         )
-
+    
     def forward(self, x1, x2):
         x1 = self.up(x1)
         x2 = self.conv1x1(x2)
@@ -98,5 +98,6 @@ class _Up(nn.Module):
 
 if __name__ == '__main__':
     from torchsummary import summary
+    
     net = DenseUNet2D().cuda()
     summary(net, (3, 512, 512))
