@@ -65,24 +65,24 @@ class KiTS19(data.Dataset):
         valid_imgs, valid_labels, valid_case_slice_num = self._read_npy(self._root, valid_case, is_test=False)
         test_imgs, test_labels, test_case_slice_num = self._read_npy(self._root, test_case, is_test=True)
         
-        self.imgs = train_imgs + valid_imgs + test_imgs
-        self.labels = train_labels + valid_labels + test_labels
+        self._imgs = train_imgs + valid_imgs + test_imgs
+        self._labels = train_labels + valid_labels + test_labels
         
-        self.indices = list(range(len(self.imgs)))
-        self.train_indices = self.indices[:len(train_imgs)]
-        self.valid_indices = self.indices[len(train_imgs):len(train_imgs) + len(valid_imgs)]
-        self.test_indices = self.indices[
-                            len(train_imgs) + len(valid_imgs): len(train_imgs) + len(valid_imgs) + len(test_imgs)]
+        self._indices = list(range(len(self._imgs)))
+        self._train_indices = self._indices[:len(train_imgs)]
+        self._valid_indices = self._indices[len(train_imgs):len(train_imgs) + len(valid_imgs)]
+        self._test_indices = self._indices[
+                             len(train_imgs) + len(valid_imgs): len(train_imgs) + len(valid_imgs) + len(test_imgs)]
         
-        self.train_case_slice_num = train_case_slice_num
-        self.valid_case_slice_num = valid_case_slice_num
-        self.test_case_slice_num = test_case_slice_num
+        self._train_case_slice_num = train_case_slice_num
+        self._valid_case_slice_num = valid_case_slice_num
+        self._test_case_slice_num = test_case_slice_num
         
-        self.case_slice_indices = [0]
+        self._case_slice_indices = [0]
         idx = 0
-        for num in self.train_case_slice_num + self.valid_case_slice_num + self.test_case_slice_num:
+        for num in self._train_case_slice_num + self._valid_case_slice_num + self._test_case_slice_num:
             idx += num
-            self.case_slice_indices.append(idx)
+            self._case_slice_indices.append(idx)
     
     def _read_npy(self, root, cases, is_test=False):
         imgs = []
@@ -118,9 +118,9 @@ class KiTS19(data.Dataset):
         return imgs, labels, case_slice_num
     
     def _split_subset(self):
-        self.train_dataset = data.Subset(self, self.train_indices)
-        self.valid_dataset = data.Subset(self, self.valid_indices)
-        self.test_dataset = data.Subset(self, self.test_indices)
+        self._train_dataset = data.Subset(self, self._train_indices)
+        self._valid_dataset = data.Subset(self, self._valid_indices)
+        self._test_dataset = data.Subset(self, self._test_indices)
     
     def get_classes_name(self, spec=True):
         classes_name = np.array(['background', 'kidney', 'tumor'])
@@ -154,7 +154,7 @@ class KiTS19(data.Dataset):
         return np.array(spec_cmap)
     
     def idx_to_name(self, idx):
-        path = self.imgs[idx]
+        path = self._imgs[idx]
         name = Path(path.parts[-3]) / Path(path.parts[-1][:-4])
         return name
     
@@ -239,8 +239,8 @@ class KiTS19(data.Dataset):
     
     def img_idx_to_case_idx(self, idx):
         case_idx = 0
-        for i in range(len(self.case_slice_indices) - 1):
-            if self.case_slice_indices[i] <= idx < self.case_slice_indices[i + 1]:
+        for i in range(len(self._case_slice_indices) - 1):
+            if self._case_slice_indices[i] <= idx < self._case_slice_indices[i + 1]:
                 case_idx = i
                 break
         return case_idx
@@ -249,19 +249,19 @@ class KiTS19(data.Dataset):
         case_idx = self.img_idx_to_case_idx(idx)
         imgs = []
         for i in range(idx - self._stack_num // 2, idx + self._stack_num // 2 + 1):
-            if i < self.case_slice_indices[case_idx]:
-                i = self.case_slice_indices[case_idx]
-            elif i >= self.case_slice_indices[case_idx + 1]:
-                i = self.case_slice_indices[case_idx + 1] - 1
-            img_path = self.imgs[i]
+            if i < self._case_slice_indices[case_idx]:
+                i = self._case_slice_indices[case_idx]
+            elif i >= self._case_slice_indices[case_idx + 1]:
+                i = self._case_slice_indices[case_idx + 1] - 1
+            img_path = self._imgs[i]
             img = np.load(str(img_path))
             imgs.append(img)
         img = np.stack(imgs, axis=2)
         
-        if idx in self.test_indices:
+        if idx in self._test_indices:
             label = None
         else:
-            label_path = self.labels[idx]
+            label_path = self._labels[idx]
             label = np.load(str(label_path))
         
         roi = None if self._rois is None else self._rois[f'case_{case_idx:05d}']['kidney']
@@ -272,11 +272,11 @@ class KiTS19(data.Dataset):
     def __getitem__(self, idx):
         data = self.get_stack_img(idx)
         
-        if idx in self.train_indices and self._train_transform is not None:
+        if idx in self._train_indices and self._train_transform is not None:
             data = self._train_transform(data)
-        elif idx in self.valid_indices and self._valid_transform is not None:
+        elif idx in self._valid_indices and self._valid_transform is not None:
             data = self._valid_transform(data)
-        elif idx in self.test_indices and self._test_transform is not None:
+        elif idx in self._test_indices and self._test_transform is not None:
             data = self._test_transform(data)
         
         data = self._default_transform(data)
@@ -284,7 +284,7 @@ class KiTS19(data.Dataset):
         return data
     
     def __len__(self):
-        return len(self.imgs)
+        return len(self._imgs)
     
     @property
     def img_channels(self):
@@ -297,6 +297,18 @@ class KiTS19(data.Dataset):
     @property
     def spec_classes(self):
         return self._spec_classes
+    
+    @property
+    def train_dataset(self):
+        return self._train_dataset
+    
+    @property
+    def valid_dataset(self):
+        return self._valid_dataset
+    
+    @property
+    def test_dataset(self):
+        return self._test_dataset
 
 
 import click
