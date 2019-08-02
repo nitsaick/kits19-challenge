@@ -158,35 +158,35 @@ class KiTS19(data.Dataset):
         name = Path(path.parts[-3]) / Path(path.parts[-1][:-4])
         return name
     
-    def vis_transform(self, imgs=None, labels=None, preds=None, to_plt=False):
+    def vis_transform(self, data):
         cmap = self.get_colormap()
-        if imgs is not None:
+        if 'image' in data.keys() and data['image'] is not None:
+            imgs = data['image']
             if type(imgs).__module__ != np.__name__:
                 imgs = imgs.cpu().detach().numpy()
-            if to_plt is True:
-                imgs = imgs.transpose((0, 2, 3, 1))
+            data['image'] = imgs
         
-        if labels is not None:
-            if type(labels).__module__ != np.__name__:
-                labels = labels.cpu().detach().numpy().astype('int')
+        if 'label' in data.keys() and data['label'] is not None:
+            labels = data['label']
+            if type(imgs).__module__ != np.__name__:
+                labels = labels.cpu().detach().numpy()
             labels = cmap[labels]
             labels = labels.transpose((0, 3, 1, 2))
-            if to_plt is True:
-                labels = labels.transpose((0, 2, 3, 1))
-            labels = labels / 255.
-        
-        if preds is not None:
-            if type(preds).__module__ != np.__name__:
+            labels = labels / 255
+            data['label'] = labels
+            
+        if 'predict' in data.keys() and data['predict'] is not None:
+            preds = data['predict']
+            if type(imgs).__module__ != np.__name__:
                 preds = preds.cpu().detach().numpy()
             if preds.shape[1] == self.num_classes:
                 preds = preds.argmax(axis=1)
-            preds = cmap[preds]
+            preds = preds[labels]
             preds = preds.transpose((0, 3, 1, 2))
-            if to_plt is True:
-                preds = preds.transpose((0, 2, 3, 1))
-            preds = preds / 255.
+            preds = preds / 255
+            data['predict'] = preds
         
-        return imgs, labels, preds
+        return data
     
     def _default_transform(self, data):
         if (data['image'].shape[0], data['image'].shape[1]) != self._img_size:
@@ -334,9 +334,9 @@ def main(data_path):
     data_loader = DataLoader(subset, batch_size=1, sampler=sampler)
     
     for batch_idx, data in enumerate(data_loader):
-        imgs, labels, idx = data['image'], data['label'], data['index']
-        img, label, _ = dataset.vis_transform(imgs=imgs, labels=labels, preds=None)
-        imshow(title='KiTS19', imgs=(img[0][1], label[0]))
+        data = dataset.vis_transform(data)
+        imgs, labels = data['image'], data['label']
+        imshow(title='KiTS19', imgs=(imgs[0][1], labels[0]))
 
 
 if __name__ == '__main__':
