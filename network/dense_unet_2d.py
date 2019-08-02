@@ -61,7 +61,7 @@ class DenseUNet2D(nn.Module):
         up3_cls = self.up3_conv(x7)
         up4_cls = self.up4_conv(x8)
 
-        return feat, cls, up1_cls, up2_cls, up3_cls, up4_cls
+        return {'output': cls, 'up1_cls': up1_cls, 'up2_cls': up2_cls, 'up3_cls': up3_cls, 'up4_cls': up4_cls}
 
 
 class _Interpolate(nn.Module):
