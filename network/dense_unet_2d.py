@@ -3,11 +3,14 @@ from torchvision import models
 
 
 class DenseUNet2D(nn.Module):
-    def __init__(self, out_ch=3):
+    def __init__(self, in_ch=3, out_ch=3):
         super(DenseUNet2D, self).__init__()
         densenet = models.densenet161(pretrained=True)
         backbone = list(list(densenet.children())[0].children())
-
+        
+        if in_ch != 3:
+            backbone[0] = nn.Conv2d(in_ch, 96, kernel_size=7, stride=2, padding=3, bias=False)
+        
         self.conv1 = nn.Sequential(*backbone[:3])
         self.mp = backbone[3]
         self.denseblock1 = backbone[4]
