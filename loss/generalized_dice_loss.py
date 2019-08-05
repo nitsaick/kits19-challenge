@@ -10,7 +10,7 @@ class GeneralizedDiceLoss(nn.Module):
         super(GeneralizedDiceLoss, self).__init__()
         # Self.idc is used to filter out some classes of the target mask. Use fancy indexing
         self.idc = kwargs['idc']
-        print(f'Initialized {self.__class__.__name__} with {kwargs}')
+        # print(f'Initialized {self.__class__.__name__} with {kwargs}')
 
     def forward(self, probs: Tensor, target: Tensor):
         assert simplex(probs) and simplex(target)
