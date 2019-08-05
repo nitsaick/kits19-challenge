@@ -32,15 +32,23 @@ class Compose:
 
 
 class MedicalTransform:
-    def __init__(self, output_size, roi_error_range=0, type='train', use_roi=True):
+    def __init__(self, output_size, roi_error_range=0, use_roi=False):
         if isinstance(output_size, (tuple, list)):
             self.output_size = output_size  # (h, w)
         else:
             self.output_size = (output_size, output_size)
         
         self.roi_error_range = roi_error_range
-        self.type = type
+        self._type = 'train'
         self.use_roi = use_roi
+        
+    def train(self):
+        self._type = 'train'
+        return self
+        
+    def eval(self):
+        self._type = 'eval'
+        return self
     
     def __call__(self, data):
         data = to_numpy(data)
@@ -50,7 +58,7 @@ class MedicalTransform:
         
         max_size = max(self.output_size[0], self.output_size[1])
         
-        if self.type == 'train':
+        if self._type == 'train':
             task = [
                 HorizontalFlip(p=0.5),
                 RandomBrightnessContrast(p=0.5),
@@ -64,14 +72,14 @@ class MedicalTransform:
         else:
             task = [
                 LongestMaxSize(max_size, p=1),
-                PadIfNeeded(self.output_size[0], self.output_size[1], cv2.BORDER_CONSTANT, value=0, p=1),
+                PadIfNeeded(self.output_size[0], self.output_size[1], cv2.BORDER_CONSTANT, value=0, p=1)
             ]
         
         if self.use_roi:
             assert 'roi' in data.keys()
             roi = data['roi']
             crop = [Crop(roi['min_x'] - self.roi_error_range, roi['min_y'] - self.roi_error_range,
-                         roi['max_x'] + self.roi_error_range, roi['max_y'] + self.roi_error_range, p=1), ]
+                         roi['max_x'] + self.roi_error_range, roi['max_y'] + self.roi_error_range, p=1)]
             task = crop + task
         
         aug = Compose_albu(task)
