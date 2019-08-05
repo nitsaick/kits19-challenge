@@ -170,7 +170,7 @@ class KiTS19(data.Dataset):
         
         if 'label' in data.keys() and data['label'] is not None:
             labels = data['label']
-            if type(imgs).__module__ != np.__name__:
+            if type(labels).__module__ != np.__name__:
                 labels = labels.cpu().detach().numpy()
             labels = cmap[labels]
             labels = labels.transpose((0, 3, 1, 2))
@@ -179,11 +179,11 @@ class KiTS19(data.Dataset):
         
         if 'predict' in data.keys() and data['predict'] is not None:
             preds = data['predict']
-            if type(imgs).__module__ != np.__name__:
+            if type(preds).__module__ != np.__name__:
                 preds = preds.cpu().detach().numpy()
             if preds.shape[1] == self.num_classes:
                 preds = preds.argmax(axis=1)
-            preds = preds[labels]
+            preds = cmap[preds]
             preds = preds.transpose((0, 3, 1, 2))
             preds = preds / 255
             data['predict'] = preds
