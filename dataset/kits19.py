@@ -75,16 +75,27 @@ class KiTS19(data.Dataset):
         self._valid_indices = self._indices[len(train_imgs):len(train_imgs) + len(valid_imgs)]
         self._test_indices = self._indices[
                              len(train_imgs) + len(valid_imgs): len(train_imgs) + len(valid_imgs) + len(test_imgs)]
-        
-        self._train_case_slice_num = train_case_slice_num
-        self._valid_case_slice_num = valid_case_slice_num
-        self._test_case_slice_num = test_case_slice_num
-        
-        self._case_slice_indices = [0]
+
         idx = 0
-        for num in self._train_case_slice_num + self._valid_case_slice_num + self._test_case_slice_num:
+        self._case_slice_indices = [0]
+        self._train_case_slice_indices = [0]
+        for num in train_case_slice_num:
             idx += num
             self._case_slice_indices.append(idx)
+            self._train_case_slice_indices.append(idx)
+
+        self._valid_case_slice_indices = [self._train_case_slice_indices[-1]]
+        for num in valid_case_slice_num:
+            idx += num
+            self._case_slice_indices.append(idx)
+            self._valid_case_slice_indices.append(idx)
+
+        self._test_case_slice_indices = [self._valid_case_slice_indices[-1]]
+        for num in test_case_slice_num:
+            idx += num
+            self._case_slice_indices.append(idx)
+            self._test_case_slice_indices.append(idx)
+            
     
     def _read_npy(self, root, cases, is_test=False):
         imgs = []
@@ -311,6 +322,18 @@ class KiTS19(data.Dataset):
     @property
     def test_dataset(self):
         return self._test_dataset
+
+    @property
+    def train_case_slice_indices(self):
+        return self._train_case_slice_indices
+
+    @property
+    def valid_case_slice_indices(self):
+        return self._valid_case_slice_indices
+
+    @property
+    def test_case_slice_indices(self):
+        return self._test_case_slice_indices
 
 
 import click
