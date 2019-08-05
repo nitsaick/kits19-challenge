@@ -17,7 +17,7 @@ from dataset.transform import to_numpy
 class KiTS19(data.Dataset):
     def __init__(self, root, stack_num=1, spec_classes=None, img_size=(512, 512),
                  train_case_ids_file='train.txt', valid_case_ids_file='val.txt', test_case_ids_file='test.txt',
-                 roi_file=None, roi_error_range=0,
+                 use_roi=False, roi_file=None, roi_error_range=0,
                  train_transform=None, valid_transform=None, test_transform=None):
         self._root = Path(root)
         self._stack_num = stack_num
@@ -29,12 +29,14 @@ class KiTS19(data.Dataset):
         
         self._img_size = img_size
         
-        self._rois = None
-        if roi_file is not None:
+        self._use_roi = use_roi
+        if use_roi:
+            self._rois = None
             _roi_file = self._root / roi_file
+            assert _roi_file.exists()
             with open(_roi_file, 'r') as f:
                 self._rois = json.load(f)
-        self._roi_error_range = roi_error_range
+            self._roi_error_range = roi_error_range
         
         self._train_transform = train_transform
         self._valid_transform = valid_transform
@@ -97,7 +99,7 @@ class KiTS19(data.Dataset):
             
             min_z = 0
             max_z = len(case_imgs)
-            if self._rois is not None:
+            if self._use_roi:
                 roi = self._rois[f'case_{case:05d}']['kidney']
                 min_z = max(min_z, roi['min_z'] - self._roi_error_range)
                 max_z = min(max_z, roi['max_z'] + self._roi_error_range)
@@ -174,7 +176,7 @@ class KiTS19(data.Dataset):
             labels = labels.transpose((0, 3, 1, 2))
             labels = labels / 255
             data['label'] = labels
-            
+        
         if 'predict' in data.keys() and data['predict'] is not None:
             preds = data['predict']
             if type(imgs).__module__ != np.__name__:
@@ -264,7 +266,7 @@ class KiTS19(data.Dataset):
             label_path = self._labels[idx]
             label = np.load(str(label_path))
         
-        roi = None if self._rois is None else self._rois[f'case_{case_idx:05d}']['kidney']
+        roi = self._rois[f'case_{case_idx:05d}']['kidney'] if self._use_roi else None
         data = {'image': img, 'label': label, 'index': idx, 'roi': roi}
         
         return data
