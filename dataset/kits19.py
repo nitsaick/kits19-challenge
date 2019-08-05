@@ -326,9 +326,10 @@ def main(data_path):
     from utils.vis import imshow
     
     root = Path(data_path)
-    transform = MedicalTransform(output_size=512, roi_error_range=15, type='train', use_roi=True)
+    transform = MedicalTransform(output_size=512, roi_error_range=15, use_roi=True)
+    transform.eval()
     dataset = KiTS19(root, stack_num=3, spec_classes=[0, 1, 2], img_size=(512, 512),
-                     roi_file='roi.json', roi_error_range=5,
+                     use_roi=True, roi_file='roi.json', roi_error_range=5,
                      train_transform=transform, valid_transform=None, test_transform=None)
     
     subset = dataset.train_dataset
