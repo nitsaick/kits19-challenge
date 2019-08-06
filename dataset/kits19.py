@@ -59,14 +59,14 @@ class KiTS19(data.Dataset):
         train_case_ids_file = self._root / train_case_ids_file
         valid_case_ids_file = self._root / valid_case_ids_file
         test_case_ids_file = self._root / test_case_ids_file
-        train_case = read_txt(train_case_ids_file)
-        valid_case = read_txt(valid_case_ids_file)
-        test_case = read_txt(test_case_ids_file)
-        self._case_id = train_case + valid_case + test_case
+        self._train_case = read_txt(train_case_ids_file)
+        self._valid_case = read_txt(valid_case_ids_file)
+        self._test_case = read_txt(test_case_ids_file)
+        self._case_id = self._train_case + self._valid_case + self._test_case
         
-        train_imgs, train_labels, train_case_slice_num = self._read_npy(self._root, train_case, is_test=False)
-        valid_imgs, valid_labels, valid_case_slice_num = self._read_npy(self._root, valid_case, is_test=False)
-        test_imgs, test_labels, test_case_slice_num = self._read_npy(self._root, test_case, is_test=True)
+        train_imgs, train_labels, train_case_slice_num = self._read_npy(self._root, self._train_case, is_test=False)
+        valid_imgs, valid_labels, valid_case_slice_num = self._read_npy(self._root, self._valid_case, is_test=False)
+        test_imgs, test_labels, test_case_slice_num = self._read_npy(self._root, self._test_case, is_test=True)
         
         self._imgs = train_imgs + valid_imgs + test_imgs
         self._labels = train_labels + valid_labels + test_labels
@@ -338,6 +338,18 @@ class KiTS19(data.Dataset):
     @property
     def test_case_slice_indices(self):
         return self._test_case_slice_indices
+    
+    @property
+    def train_case(self):
+        return self._train_case
+    
+    @property
+    def valid_case(self):
+        return self._valid_case
+    
+    @property
+    def test_case(self):
+        return self._test_case
 
 
 import click

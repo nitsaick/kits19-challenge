@@ -221,11 +221,11 @@ def evaluation(net, dataset, epoch, batch_size, num_workers, vis_intvl, logger, 
                 vol_output = np.concatenate(vol_output, axis=0)
                 vol_label = np.concatenate(vol_label, axis=0)
                 
-                vol_idx = case_slice_indices[case + 1] - case_slice_indices[case]
-                evaluator.add(vol_output[:vol_idx], vol_label[:vol_idx])
+                vol_num_slice = case_slice_indices[case + 1] - case_slice_indices[case]
+                evaluator.add(vol_output[:vol_num_slice], vol_label[:vol_num_slice])
                 
-                vol_output = [vol_output[vol_idx:]]
-                vol_label = [vol_label[vol_idx:]]
+                vol_output = [vol_output[vol_num_slice:]]
+                vol_label = [vol_label[vol_num_slice:]]
                 case += 1
                 pbar.update(1)
             
@@ -248,10 +248,10 @@ def evaluation(net, dataset, epoch, batch_size, num_workers, vis_intvl, logger, 
         for j in range(len(dc_each_case)):
             dc = dc_each_case[j]
             if type == 'train':
-                case_idx = dataset.train_case[i]
+                case_id = dataset.train_case[i]
             elif type == 'valid':
-                case_idx = dataset.valid_case[i]
-            logger.add_scalar(f'{type}_each_case/{case_idx:05d}/dc_{j}', dc, epoch)
+                case_id = dataset.valid_case[i]
+            logger.add_scalar(f'{type}_each_case/{case_id:05d}/dc_{j}', dc, epoch)
     
     score = (acc['dc_per_case_1'] + acc['dc_per_case_2']) / 2
     logger.add_scalar(f'{type}/score', score, epoch)
