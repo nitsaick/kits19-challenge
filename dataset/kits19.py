@@ -280,11 +280,16 @@ class KiTS19(data.Dataset):
             label_path = self._labels[idx]
             label = np.load(str(label_path))
         
-        case_id = self.case_idx_to_case_id(case_idx)
-        roi = self._rois[f'case_{case_id:05d}']['kidney'] if self._use_roi else 0
+        roi = self.get_roi(case_idx)
         data = {'image': img, 'label': label, 'index': idx, 'roi': roi}
         
         return data
+    
+    def get_roi(self, case_idx):
+        case_id = self.case_idx_to_case_id(case_idx)
+        roi = self._rois[f'case_{case_id:05d}']['kidney'] if self._use_roi else {}
+        
+        return roi
     
     def __getitem__(self, idx):
         data = self.get_stack_img(idx)
