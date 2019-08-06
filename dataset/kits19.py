@@ -62,6 +62,7 @@ class KiTS19(data.Dataset):
         train_case = read_txt(train_case_ids_file)
         valid_case = read_txt(valid_case_ids_file)
         test_case = read_txt(test_case_ids_file)
+        self._case_id = train_case + valid_case + test_case
         
         train_imgs, train_labels, train_case_slice_num = self._read_npy(self._root, train_case, is_test=False)
         valid_imgs, valid_labels, valid_case_slice_num = self._read_npy(self._root, valid_case, is_test=False)
@@ -75,7 +76,7 @@ class KiTS19(data.Dataset):
         self._valid_indices = self._indices[len(train_imgs):len(train_imgs) + len(valid_imgs)]
         self._test_indices = self._indices[
                              len(train_imgs) + len(valid_imgs): len(train_imgs) + len(valid_imgs) + len(test_imgs)]
-
+        
         idx = 0
         self._case_slice_indices = [0]
         self._train_case_slice_indices = [0]
@@ -83,19 +84,18 @@ class KiTS19(data.Dataset):
             idx += num
             self._case_slice_indices.append(idx)
             self._train_case_slice_indices.append(idx)
-
+        
         self._valid_case_slice_indices = [self._train_case_slice_indices[-1]]
         for num in valid_case_slice_num:
             idx += num
             self._case_slice_indices.append(idx)
             self._valid_case_slice_indices.append(idx)
-
+        
         self._test_case_slice_indices = [self._valid_case_slice_indices[-1]]
         for num in test_case_slice_num:
             idx += num
             self._case_slice_indices.append(idx)
             self._test_case_slice_indices.append(idx)
-            
     
     def _read_npy(self, root, cases, is_test=False):
         imgs = []
@@ -258,6 +258,9 @@ class KiTS19(data.Dataset):
                 break
         return case_idx
     
+    def case_idx_to_case_id(self, case_idx):
+        return self._case_id[case_idx]
+    
     def get_stack_img(self, idx):
         case_idx = self.img_idx_to_case_idx(idx)
         imgs = []
@@ -277,7 +280,8 @@ class KiTS19(data.Dataset):
             label_path = self._labels[idx]
             label = np.load(str(label_path))
         
-        roi = self._rois[f'case_{case_idx:05d}']['kidney'] if self._use_roi else None
+        case_id = self.case_idx_to_case_id(case_idx)
+        roi = self._rois[f'case_{case_id:05d}']['kidney'] if self._use_roi else 0
         data = {'image': img, 'label': label, 'index': idx, 'roi': roi}
         
         return data
@@ -322,15 +326,15 @@ class KiTS19(data.Dataset):
     @property
     def test_dataset(self):
         return self._test_dataset
-
+    
     @property
     def train_case_slice_indices(self):
         return self._train_case_slice_indices
-
+    
     @property
     def valid_case_slice_indices(self):
         return self._valid_case_slice_indices
-
+    
     @property
     def test_case_slice_indices(self):
         return self._test_case_slice_indices
