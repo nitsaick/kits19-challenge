@@ -25,6 +25,8 @@ from utils.vis import imshow
 @click.option('-b', '--batch', 'batch_size', help='Number of batch size', type=int, default=1, show_default=True)
 @click.option('-l', '--lr', help='Learning rate', type=float, default=0.0001, show_default=True)
 @click.option('-g', '--num_gpu', help='Number of GPU', type=int, default=1, show_default=True)
+@click.option('-s', '--size', 'img_size', help='Output image size', type=(int, int),
+              default=(512, 512), show_default=True)
 @click.option('--data', 'data_path', help='kits19 data path',
               type=click.Path(exists=True, dir_okay=True, resolve_path=True),
               default='data', show_default=True)
@@ -46,7 +48,8 @@ from utils.vis import imshow
                                     'Recommend 0 in Windows. '
                                     'Recommend num_gpu in Linux',
               type=int, default=0, show_default=True)
-def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_intvl, cp_intvl, vis_intvl, num_workers):
+def main(epoch_num, batch_size, lr, num_gpu, img_size, data_path, log_path,
+         resume, eval_intvl, cp_intvl, vis_intvl, num_workers):
     data_path = Path(data_path)
     log_path = Path(log_path)
     cp_path = log_path / 'checkpoint'
@@ -57,9 +60,9 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
     if not cp_path.exists():
         cp_path.mkdir(parents=True)
     
-    transform = MedicalTransform(output_size=512, roi_error_range=15, use_roi=True)
+    transform = MedicalTransform(output_size=img_size, roi_error_range=15, use_roi=True)
     
-    dataset = KiTS19(data_path, stack_num=3, spec_classes=[0, 1, 2], img_size=(512, 512),
+    dataset = KiTS19(data_path, stack_num=3, spec_classes=[0, 1, 2], img_size=img_size,
                      use_roi=True, roi_file='roi.json', roi_error_range=5,
                      train_transform=transform, valid_transform=transform)
     
