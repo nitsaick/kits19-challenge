@@ -177,8 +177,8 @@ def training(net, dataset, criterion, optimizer, scheduler, epoch, batch_size, n
             data['predict'] = outputs
             data = dataset.vis_transform(data)
             imgs, labels, predicts = data['image'], data['label'], data['predict']
-            imshow(title='Train', imgs=(imgs[0, dataset.img_channels // 2], labels[0], predicts[0]), shape=(1, 3),
-                   subtitle=('image', 'label', 'predict'))
+            imshow(title='Train', imgs=(imgs[0, dataset.img_channels // 2], labels[0], predicts[0]),
+                   shape=(1, 3), subtitle=('image', 'label', 'predict'))
         
         tbar.set_postfix(loss=f'{loss.item():.5f}')
     
@@ -236,8 +236,8 @@ def evaluation(net, dataset, epoch, batch_size, num_workers, vis_intvl, logger, 
                 data['predict'] = outputs
                 data = dataset.vis_transform(data)
                 imgs, labels, predicts = data['image'], data['label'], data['predict']
-                imshow(title=f'eval/{type:5}', imgs=(imgs[0, 1], labels[0], predicts[0]), shape=(1, 3),
-                       subtitle=('image', 'label', 'predict'))
+                imshow(title=f'eval/{type:5}', imgs=(imgs[0, dataset.img_channels // 2], labels[0], predicts[0]),
+                       shape=(1, 3), subtitle=('image', 'label', 'predict'))
     
     acc = evaluator.eval()
     
