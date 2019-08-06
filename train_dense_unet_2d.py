@@ -145,8 +145,8 @@ def main(epoch_num, batch_size, lr, num_gpu, img_size, data_path, log_path,
                 cp_file = cp_path / 'best.pth'
                 cp.save(epoch, net.module, optimizer, str(cp_file))
                 print('Update best acc!')
-                logger.add_scalar('best epoch', best_epoch + 1, 0)
-                logger.add_scalar('best score', best_score, 0)
+                logger.add_scalar('best/epoch', best_epoch + 1, 0)
+                logger.add_scalar('best/score', best_score, 0)
             
             if (epoch + 1) % cp_intvl == 0:
                 cp_file = cp_path / f'cp_{epoch + 1:03d}.pth'
@@ -265,18 +265,19 @@ def evaluation(net, dataset, epoch, batch_size, num_workers, vis_intvl, logger, 
     
     for k in sorted(list(acc.keys())):
         if k == 'dc_each_case': continue
-        print(f'{type}/{k}: {acc[k]:.5f}')
+        print(f'{type}_all_case_acc/{k}: {acc[k]:.5f}')
         logger.add_scalar(f'{type}/{k}', acc[k], epoch)
     
-    for i in range(len(acc['dc_each_case'])):
-        dc_each_case = acc['dc_each_case'][i]
-        for j in range(len(dc_each_case)):
-            dc = dc_each_case[j]
-            if type == 'train':
-                case_id = dataset.train_case[i]
-            elif type == 'valid':
-                case_id = dataset.valid_case[i]
-            logger.add_scalar(f'{type}_each_case/{case_id:05d}/dc_{j}', dc, epoch)
+    for case_idx in range(len(acc['dc_each_case'])):
+        if type == 'train':
+            case_id = dataset.train_case[case_idx]
+        elif type == 'valid':
+            case_id = dataset.valid_case[case_idx]
+            
+        dc_each_case = acc['dc_each_case'][case_idx]
+        for cls in range(len(dc_each_case)):
+            dc = dc_each_case[cls]
+            logger.add_scalar(f'{type}_each_case_acc/case_{case_id:05d}/dc_{cls}', dc, epoch)
     
     score = (acc['dc_per_case_1'] + acc['dc_per_case_2']) / 2
     logger.add_scalar(f'{type}/score', score, epoch)
