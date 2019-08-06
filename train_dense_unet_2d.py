@@ -122,8 +122,8 @@ def main(epoch_num, batch_size, lr, num_gpu, data_path, log_path, resume, eval_i
         torch.set_grad_enabled(True)
         transform.train()
         try:
-            loss = training(net, dataset, criterion, optimizer, scheduler, epoch, batch_size, num_workers, vis_intvl,
-                            logger)
+            loss = training(net, dataset, criterion, optimizer, scheduler,
+                            epoch, batch_size, num_workers, vis_intvl, logger)
             
             if eval_intvl > 0 and (epoch + 1) % eval_intvl == 0:
                 net.eval()
@@ -191,7 +191,7 @@ def training(net, dataset, criterion, optimizer, scheduler, epoch, batch_size, n
             data['predict'] = outputs['output']
             data = dataset.vis_transform(data)
             imgs, labels, predicts = data['image'], data['label'], data['predict']
-            imshow(title='Train', imgs=(imgs[0, 1], labels[0], predicts[0]), shape=(1, 3),
+            imshow(title='Train', imgs=(imgs[0, dataset.img_channels // 2], labels[0], predicts[0]), shape=(1, 3),
                    subtitle=('image', 'label', 'predict'))
         
         losses['total'] = loss
@@ -202,7 +202,7 @@ def training(net, dataset, criterion, optimizer, scheduler, epoch, batch_size, n
     
     for k, v in losses.items():
         logger.add_scalar(f'loss/{k}', v, epoch)
-        
+    
     return loss.item()
 
 
@@ -229,15 +229,15 @@ def evaluation(net, dataset, epoch, batch_size, num_workers, vis_intvl, logger, 
             imgs, labels, idx = data['image'].cuda(), data['label'], data['index']
             
             outputs = net(imgs)
-            outputs = outputs['output']
-            outputs = outputs.argmax(dim=1)
+            predicts = outputs['output']
+            predicts = predicts.argmax(dim=1)
             
             labels = labels.cpu().detach().numpy()
-            outputs = outputs.cpu().detach().numpy()
+            predicts = predicts.cpu().detach().numpy()
             idx = idx.numpy()
             
             vol_label.append(labels)
-            vol_output.append(outputs)
+            vol_output.append(predicts)
             
             while case < len(case_slice_indices) - 1 and idx[-1] >= case_slice_indices[case + 1] - 1:
                 vol_output = np.concatenate(vol_output, axis=0)
@@ -252,7 +252,7 @@ def evaluation(net, dataset, epoch, batch_size, num_workers, vis_intvl, logger, 
                 pbar.update(1)
             
             if vis_intvl > 0 and batch_idx % vis_intvl == 0:
-                data['predict'] = outputs
+                data['predict'] = predicts
                 data = dataset.vis_transform(data)
                 imgs, labels, predicts = data['image'], data['label'], data['predict']
                 imshow(title=f'eval/{type:5}', imgs=(imgs[0, 1], labels[0], predicts[0]), shape=(1, 3),
