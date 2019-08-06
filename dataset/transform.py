@@ -76,7 +76,7 @@ class MedicalTransform:
             ]
         
         if self.use_roi:
-            assert 'roi' in data.keys()
+            assert 'roi' in data.keys() and type(data['roi']) is dict
             roi = data['roi']
             crop = [Crop(roi['min_x'] - self.roi_error_range, roi['min_y'] - self.roi_error_range,
                          roi['max_x'] + self.roi_error_range, roi['max_y'] + self.roi_error_range, p=1)]
