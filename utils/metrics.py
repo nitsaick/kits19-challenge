@@ -51,7 +51,7 @@ class Evaluator:
         for cls in range(self.num_classes):
             dc_per_case = self.dc_per_case[cls] / self.num_case[cls]
             dc_global = self.dice_coef(cls, self.confusion_matrix)
-            acc.update({f'dc_per_case_{cls}': dc_per_case})
-            acc.update({f'dc_global_{cls}': dc_global})
-        acc.update({'dc_each_case': self.dc_each_case})
+            acc[f'dc_per_case_{cls}'] = dc_per_case
+            acc[f'dc_global_{cls}'] = dc_global
+        acc[f'dc_each_case'] = self.dc_each_case
         return acc
