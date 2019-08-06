@@ -265,8 +265,8 @@ def evaluation(net, dataset, epoch, batch_size, num_workers, vis_intvl, logger, 
     
     for k in sorted(list(acc.keys())):
         if k == 'dc_each_case': continue
-        print(f'{type}_all_case_acc/{k}: {acc[k]:.5f}')
-        logger.add_scalar(f'{type}/{k}', acc[k], epoch)
+        print(f'{type}/{k}: {acc[k]:.5f}')
+        logger.add_scalar(f'{type}_acc_total/{k}', acc[k], epoch)
     
     for case_idx in range(len(acc['dc_each_case'])):
         if type == 'train':
@@ -277,7 +277,7 @@ def evaluation(net, dataset, epoch, batch_size, num_workers, vis_intvl, logger, 
         dc_each_case = acc['dc_each_case'][case_idx]
         for cls in range(len(dc_each_case)):
             dc = dc_each_case[cls]
-            logger.add_scalar(f'{type}_each_case_acc/case_{case_id:05d}/dc_{cls}', dc, epoch)
+            logger.add_scalar(f'{type}_acc_each_case/case_{case_id:05d}/dc_{cls}', dc, epoch)
     
     score = (acc['dc_per_case_1'] + acc['dc_per_case_2']) / 2
     logger.add_scalar(f'{type}/score', score, epoch)
