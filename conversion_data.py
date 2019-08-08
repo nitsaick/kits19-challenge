@@ -4,18 +4,7 @@ import click
 import nibabel as nib
 import numpy as np
 from pathlib2 import Path
-
-
-def normalize(volume):
-    DEFAULT_HU_MAX = 512
-    DEFAULT_HU_MIN = -512
-    volume = np.clip(volume, DEFAULT_HU_MIN, DEFAULT_HU_MAX)
-    
-    mxval = np.max(volume)
-    mnval = np.min(volume)
-    volume_norm = (volume - mnval) / max(mxval - mnval, 1e-3)
-    
-    return volume_norm
+from dataset import KiTS19
 
 
 @click.command()
@@ -29,15 +18,15 @@ def conversion_nii2npy(data, output):
     
     cases = sorted([d for d in data.iterdir() if d.is_dir()])
     pool = mp.Pool()
-    pool.map(proc, zip(cases, [output] * len(cases)))
+    pool.map(conversion, zip(cases, [output] * len(cases)))
     pool.close()
     pool.join()
 
 
-def proc(data):
+def conversion(data):
     case, output = data
     vol = nib.load(str(case / 'imaging.nii.gz')).get_data()
-    vol = normalize(vol)
+    vol = KiTS19.normalize(vol)
     imaging_dir = output / case.name / 'imaging'
     if not imaging_dir.exists():
         imaging_dir.mkdir(parents=True)
