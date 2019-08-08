@@ -231,6 +231,18 @@ class KiTS19(data.Dataset):
         
         return data
     
+    @staticmethod
+    def normalize(vol):
+        hu_max = 512
+        hu_min = -512
+        vol = np.clip(vol, hu_min, hu_max)
+    
+        mxval = np.max(vol)
+        mnval = np.min(vol)
+        volume_norm = (vol - mnval) / max(mxval - mnval, 1e-3)
+    
+        return volume_norm
+    
     def _resize(self, data):
         data = to_numpy(data)
         img, label = data['image'], data['label']
