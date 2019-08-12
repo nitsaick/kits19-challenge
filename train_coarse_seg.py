@@ -247,11 +247,7 @@ def evaluation(net, dataset, epoch, batch_size, num_workers, vis_intvl, logger, 
         logger.add_scalar(f'{type}_acc_total/{k}', acc[k], epoch)
     
     for case_idx in range(len(acc['dc_each_case'])):
-        if type == 'train':
-            case_id = dataset.train_case[case_idx]
-        elif type == 'valid':
-            case_id = dataset.valid_case[case_idx]
-            
+        case_id = dataset.case_idx_to_case_id(case_idx, type)
         dc_each_case = acc['dc_each_case'][case_idx]
         for cls in range(len(dc_each_case)):
             dc = dc_each_case[cls]
