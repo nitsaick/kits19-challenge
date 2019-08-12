@@ -34,18 +34,18 @@ class Compose:
 class MedicalTransform:
     def __init__(self, output_size, roi_error_range=0, use_roi=False):
         if isinstance(output_size, (tuple, list)):
-            self.output_size = output_size  # (h, w)
+            self._output_size = output_size  # (h, w)
         else:
-            self.output_size = (output_size, output_size)
+            self._output_size = (output_size, output_size)
         
-        self.roi_error_range = roi_error_range
+        self._roi_error_range = roi_error_range
         self._type = 'train'
         self.use_roi = use_roi
-        
+    
     def train(self):
         self._type = 'train'
         return self
-        
+    
     def eval(self):
         self._type = 'eval'
         return self
@@ -54,9 +54,9 @@ class MedicalTransform:
         data = to_numpy(data)
         img, label = data['image'], data['label']
         
-        is_3d = True if img.shape == 4 and label.shape == 3 else False
+        is_3d = True if img.shape == 4 else False
         
-        max_size = max(self.output_size[0], self.output_size[1])
+        max_size = max(self._output_size[0], self._output_size[1])
         
         if self._type == 'train':
             task = [
@@ -65,21 +65,29 @@ class MedicalTransform:
                 RandomGamma(p=0.5),
                 GridDistortion(border_mode=cv2.BORDER_CONSTANT, p=0.5),
                 LongestMaxSize(max_size, p=1),
-                PadIfNeeded(self.output_size[0], self.output_size[1], cv2.BORDER_CONSTANT, value=0, p=1),
+                PadIfNeeded(self._output_size[0], self._output_size[1], cv2.BORDER_CONSTANT, value=0, p=1),
                 ShiftScaleRotate(shift_limit=0.2, scale_limit=0.5, rotate_limit=30, border_mode=cv2.BORDER_CONSTANT,
                                  value=0, p=0.5)
             ]
         else:
             task = [
                 LongestMaxSize(max_size, p=1),
-                PadIfNeeded(self.output_size[0], self.output_size[1], cv2.BORDER_CONSTANT, value=0, p=1)
+                PadIfNeeded(self._output_size[0], self._output_size[1], cv2.BORDER_CONSTANT, value=0, p=1)
             ]
         
         if self.use_roi:
-            assert 'roi' in data.keys() and type(data['roi']) is dict
+            assert 'roi' in data.keys() and len(data['roi']) is not 0
             roi = data['roi']
-            crop = [Crop(roi['min_x'] - self.roi_error_range, roi['min_y'] - self.roi_error_range,
-                         roi['max_x'] + self.roi_error_range, roi['max_y'] + self.roi_error_range, p=1)]
+            min_y = 0
+            max_y = img.shape[0]
+            min_x = 0
+            max_x = img.shape[1]
+            min_x = max(min_x, roi['min_x'] - self._roi_error_range)
+            max_x = min(max_x, roi['max_x'] + self._roi_error_range)
+            min_y = max(min_y, roi['min_y'] - self._roi_error_range)
+            max_y = min(max_y, roi['max_y'] + self._roi_error_range)
+            
+            crop = [Crop(min_x, min_y, max_x, max_y, p=1)]
             task = crop + task
         
         aug = Compose_albu(task)
@@ -114,3 +122,11 @@ class MedicalTransform:
             data['label'] = label
         
         return data
+    
+    @property
+    def roi_error_range(self):
+        return self._roi_error_range
+    
+    @property
+    def output_size(self):
+        return self._output_size
