@@ -179,7 +179,7 @@ class KiTS19(data.Dataset):
                 imgs = imgs.cpu().detach().numpy()
             data['image'] = imgs
         
-        if 'label' in data.keys() and data['label'] is not None:
+        if 'label' in data.keys() and data['label'] is not None and data['label'].shape[-1] != 0:
             labels = data['label']
             if type(labels).__module__ != np.__name__:
                 labels = labels.cpu().detach().numpy()
@@ -229,6 +229,9 @@ class KiTS19(data.Dataset):
             label = torch.from_numpy(label)
             data['label'] = label
         
+        else:
+            data['label'] = torch.Tensor()
+        
         return data
     
     @staticmethod
@@ -236,11 +239,11 @@ class KiTS19(data.Dataset):
         hu_max = 512
         hu_min = -512
         vol = np.clip(vol, hu_min, hu_max)
-    
+        
         mxval = np.max(vol)
         mnval = np.min(vol)
         volume_norm = (vol - mnval) / max(mxval - mnval, 1e-3)
-    
+        
         return volume_norm
     
     def _resize(self, data):
@@ -270,8 +273,15 @@ class KiTS19(data.Dataset):
                 break
         return case_idx
     
-    def case_idx_to_case_id(self, case_idx):
-        return self._case_id[case_idx]
+    def case_idx_to_case_id(self, case_idx, type='all'):
+        if type == 'all':
+            return self._case_id[case_idx]
+        elif type == 'train':
+            return self._train_case[case_idx]
+        elif type == 'valid':
+            return self._valid_case[case_idx]
+        elif type == 'test':
+            return self._test_case[case_idx]
     
     def get_stack_img(self, idx):
         case_idx = self.img_idx_to_case_idx(idx)
@@ -292,14 +302,14 @@ class KiTS19(data.Dataset):
             label_path = self._labels[idx]
             label = np.load(str(label_path))
         
-        roi = self.get_roi(case_idx)
+        roi = self.get_roi(case_idx, type='all')['kidney'] if self._use_roi else {}
         data = {'image': img, 'label': label, 'index': idx, 'roi': roi}
         
         return data
     
-    def get_roi(self, case_idx):
-        case_id = self.case_idx_to_case_id(case_idx)
-        roi = self._rois[f'case_{case_id:05d}']['kidney'] if self._use_roi else {}
+    def get_roi(self, case_idx, type='all'):
+        case_id = self.case_idx_to_case_id(case_idx, type)
+        roi = self._rois[f'case_{case_id:05d}']
         
         return roi
     
@@ -331,6 +341,10 @@ class KiTS19(data.Dataset):
     @property
     def spec_classes(self):
         return self._spec_classes
+
+    @property
+    def roi_error_range(self):
+        return self._roi_error_range
     
     @property
     def train_dataset(self):
