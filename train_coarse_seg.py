@@ -59,7 +59,7 @@ def main(epoch_num, batch_size, lr, num_gpu, img_size, data_path, log_path,
     
     transform = MedicalTransform(output_size=img_size, roi_error_range=15, use_roi=False)
     
-    dataset = KiTS19(data_path, stack_num=5, spec_classes=[0, 1, 2], img_size=img_size,
+    dataset = KiTS19(data_path, stack_num=5, spec_classes=[0, 1, 1], img_size=img_size,
                      use_roi=False, train_transform=transform, valid_transform=transform)
     
     net = ResUNet(in_ch=dataset.img_channels, out_ch=dataset.num_classes, base_ch=64)
