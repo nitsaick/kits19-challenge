@@ -1,17 +1,12 @@
 import cv2
 import numpy as np
-from albumentations import Compose as Compose_alb
+from albumentations import Compose as Compose_albu
 from albumentations import (
     PadIfNeeded,
     HorizontalFlip,
-    CenterCrop,
     GridDistortion,
-    RandomCrop,
-    OneOf,
     RandomBrightnessContrast,
     RandomGamma,
-    Resize,
-    RandomScale,
     Crop,
     LongestMaxSize,
     ShiftScaleRotate
@@ -21,7 +16,8 @@ from albumentations import (
 def to_numpy(data):
     image, label = data['image'], data['label']
     data['image'] = np.array(image)
-    data['label'] = np.array(label)
+    if data['label'] is not None:
+        data['label'] = np.array(label)
     return data
 
 
@@ -35,237 +31,71 @@ class Compose:
         return data
 
 
-class RandomCropAndFlip:
-    def __init__(self, output_size, type='train'):
-        if isinstance(output_size, (tuple, list)):
-            self.output_size = output_size  # (h, w)
-        else:
-            self.output_size = (output_size, output_size)
-        
-        self.type = type
-    
-    def __call__(self, data):
-        data = to_numpy(data)
-        img, label = data['image'], data['label']
-        
-        if self.type == 'train':
-            aug = Compose_alb([
-                PadIfNeeded(min_height=self.output_size[0], min_width=self.output_size[1],
-                            border_mode=cv2.BORDER_CONSTANT, value=[0, 0, 0]),
-                OneOf([
-                    RandomCrop(height=self.output_size[0], width=self.output_size[1], p=1),
-                    CenterCrop(height=self.output_size[0], width=self.output_size[1], p=1)
-                ], p=1),
-                HorizontalFlip(p=0.5),
-            ])
-        elif self.type == 'valid':
-            aug = Compose_alb([
-                PadIfNeeded(min_height=self.output_size[0], min_width=self.output_size[1],
-                            border_mode=cv2.BORDER_CONSTANT, value=[0, 0, 0]),
-                CenterCrop(height=self.output_size[0], width=self.output_size[1], p=1)
-            ])
-        
-        data = aug(image=img, mask=label)
-        img, label = data['image'], data['mask']
-        
-        data = {'image': img, 'label': label}
-        return data
-
-
-class PadAndResize:
-    def __init__(self, output_size, type='train'):
-        if isinstance(output_size, (tuple, list)):
-            self.output_size = output_size  # (h, w)
-        else:
-            self.output_size = (output_size, output_size)
-        
-        self.type = type
-    
-    def __call__(self, data):
-        data = to_numpy(data)
-        img, label = data['image'], data['label']
-        
-        aug = Compose_alb([
-            PadIfNeeded(min_height=self.output_size[0], min_width=self.output_size[1],
-                        border_mode=cv2.BORDER_CONSTANT, value=[0, 0, 0]),
-            Resize(height=self.output_size[0], width=self.output_size[1])
-        ])
-        
-        data = aug(image=img, mask=label)
-        img, label = data['image'], data['mask']
-        
-        data = {'image': img, 'label': label}
-        return data
-
-
-class RandomScaleCrop:
-    def __init__(self, output_size, scale_range=0.1, type='train'):
-        if isinstance(output_size, (tuple, list)):
-            self.output_size = output_size  # (h, w)
-        else:
-            self.output_size = (output_size, output_size)
-        
-        self.scale_range = scale_range
-        self.type = type
-    
-    def __call__(self, data):
-        data = to_numpy(data)
-        img, label = data['image'], data['label']
-        
-        img_size = img.shape[0] if img.shape[0] < img.shape[1] else img.shape[1]
-        crop_size = self.output_size[0] if self.output_size[0] < self.output_size[1] else self.output_size[1]
-        scale = crop_size / img_size - 1
-        if scale < 0:
-            scale_limit = (scale - self.scale_range, scale + self.scale_range)
-        else:
-            scale_limit = (-self.scale_range, scale + self.scale_range)
-        
-        if self.type == 'train':
-            aug = Compose_alb([
-                RandomScale(scale_limit=scale_limit, p=1),
-                PadIfNeeded(min_height=self.output_size[0], min_width=self.output_size[1],
-                            border_mode=cv2.BORDER_CONSTANT, value=[0, 0, 0]),
-                OneOf([
-                    RandomCrop(height=self.output_size[0], width=self.output_size[1], p=1),
-                    CenterCrop(height=self.output_size[0], width=self.output_size[1], p=1)
-                ], p=1),
-            ])
-        elif self.type == 'valid':
-            aug = Compose_alb([
-                PadIfNeeded(min_height=self.output_size[0], min_width=self.output_size[1],
-                            border_mode=cv2.BORDER_CONSTANT, value=[0, 0, 0]),
-                CenterCrop(height=self.output_size[0], width=self.output_size[1], p=1)
-            ])
-        
-        data = aug(image=img, mask=label)
-        img, label = data['image'], data['mask']
-        
-        data = {'image': img, 'label': label}
-        return data
-
-
 class MedicalTransform:
-    def __init__(self, type):
-        self.type = type
-    
-    def __call__(self, data):
-        data = to_numpy(data)
-        
-        img, label = data['image'], data['label']
-        
-        if self.type == 'train':
-            aug = Compose_alb([
-                HorizontalFlip(p=0.5),
-                OneOf([
-                    GridDistortion(p=1, border_mode=cv2.BORDER_CONSTANT),
-                    # OpticalDistortion(p=1, distort_limit=1, shift_limit=10)
-                ], p=0.5),
-                RandomBrightnessContrast(p=0.5),
-                RandomGamma(p=0.5)
-            ])
-            data = aug(image=img, mask=label)
-            img, label = data['image'], data['mask']
-        
-        data = {'image': img, 'label': label}
-        return data
-
-
-class MedicalTransform3D:
-    def __init__(self, type):
-        self.type = type
-    
-    def __call__(self, data):
-        data = to_numpy(data)
-        
-        img, label = data['image'], data['label']
-        
-        if self.type == 'train':
-            aug = Compose_alb([
-                HorizontalFlip(p=0.5),
-                OneOf([
-                    GridDistortion(p=1, border_mode=cv2.BORDER_CONSTANT),
-                    # OpticalDistortion(p=1, distort_limit=1, shift_limit=10, border_mode=cv2.BORDER_CONSTANT),
-                    # ElasticTransform(p=1, border_mode=cv2.BORDER_CONSTANT)
-                
-                ], p=0.5),
-                RandomBrightnessContrast(p=0.5),
-                RandomGamma(p=0.5)
-            ])
-            
-            keys = {}
-            targets = {}
-            for i in range(1, img.shape[2]):
-                keys.update({f'image{i}': 'image'})
-                keys.update({f'mask{i}': 'mask'})
-                targets.update({f'image{i}': img[:, :, i]})
-                targets.update({f'mask{i}': label[:, :, i]})
-            aug.add_targets(keys)
-            
-            targets.update({'image': img[:, :, 0]})
-            targets.update({'mask': label[:, :, 0]})
-            
-            data = aug(**targets)
-            imgs = [data['image']]
-            labels = [data['mask']]
-            
-            for i in range(1, img.shape[2]):
-                imgs.append(data[f'image{i}'])
-                labels.append(data[f'mask{i}'])
-            
-            img = np.stack(imgs, axis=-1)
-            label = np.stack(labels, axis=-1)
-        
-        data = {'image': img, 'label': label}
-        return data
-
-
-class MedicalTransform2:
-    def __init__(self, output_size, type='train', use_roi=True):
+    def __init__(self, output_size, roi_error_range=0, use_roi=False):
         if isinstance(output_size, (tuple, list)):
-            self.output_size = output_size  # (h, w)
+            self._output_size = output_size  # (h, w)
         else:
-            self.output_size = (output_size, output_size)
-
-        self.type = type
+            self._output_size = (output_size, output_size)
+        
+        self._roi_error_range = roi_error_range
+        self._type = 'train'
         self.use_roi = use_roi
-
+    
+    def train(self):
+        self._type = 'train'
+        return self
+    
+    def eval(self):
+        self._type = 'eval'
+        return self
+    
     def __call__(self, data):
         data = to_numpy(data)
         img, label = data['image'], data['label']
-
-        is_3d = False
-        if img.shape == 4 and label.shape == 3:
-            is_3d = True
-
-        max_size = max(self.output_size[0], self.output_size[1])
-
-        if self.type == 'train':
+        
+        is_3d = True if img.shape == 4 else False
+        
+        max_size = max(self._output_size[0], self._output_size[1])
+        
+        if self._type == 'train':
             task = [
                 HorizontalFlip(p=0.5),
                 RandomBrightnessContrast(p=0.5),
                 RandomGamma(p=0.5),
                 GridDistortion(border_mode=cv2.BORDER_CONSTANT, p=0.5),
                 LongestMaxSize(max_size, p=1),
-                PadIfNeeded(self.output_size[0], self.output_size[1], cv2.BORDER_CONSTANT, value=0, p=1),
+                PadIfNeeded(self._output_size[0], self._output_size[1], cv2.BORDER_CONSTANT, value=0, p=1),
                 ShiftScaleRotate(shift_limit=0.2, scale_limit=0.5, rotate_limit=30, border_mode=cv2.BORDER_CONSTANT,
                                  value=0, p=0.5)
             ]
         else:
             task = [
                 LongestMaxSize(max_size, p=1),
-                PadIfNeeded(self.output_size[0], self.output_size[1], cv2.BORDER_CONSTANT, value=0, p=1),
+                PadIfNeeded(self._output_size[0], self._output_size[1], cv2.BORDER_CONSTANT, value=0, p=1)
             ]
-
+        
         if self.use_roi:
-            assert 'roi' in data.keys()
+            assert 'roi' in data.keys() and len(data['roi']) is not 0
             roi = data['roi']
-            roi_range = 15
-            crop = [Crop(roi['min_x'] - roi_range, roi['min_y'] - roi_range,
-                         roi['max_x'] + roi_range, roi['max_y'] + roi_range, p=1), ]
+            min_y = 0
+            max_y = img.shape[0]
+            min_x = 0
+            max_x = img.shape[1]
+            min_x = max(min_x, roi['min_x'] - self._roi_error_range)
+            max_x = min(max_x, roi['max_x'] + self._roi_error_range)
+            min_y = max(min_y, roi['min_y'] - self._roi_error_range)
+            max_y = min(max_y, roi['max_y'] + self._roi_error_range)
+            
+            crop = [Crop(min_x, min_y, max_x, max_y, p=1)]
             task = crop + task
-
-        aug = Compose_alb(task)
-        if is_3d:
+        
+        aug = Compose_albu(task)
+        if not is_3d:
+            aug_data = aug(image=img, mask=label)
+            data['image'], data['label'] = aug_data['image'], aug_data['mask']
+        
+        else:
             keys = {}
             targets = {}
             for i in range(1, img.shape[2]):
@@ -274,24 +104,29 @@ class MedicalTransform2:
                 targets.update({f'image{i}': img[:, :, i]})
                 targets.update({f'mask{i}': label[:, :, i]})
             aug.add_targets(keys)
-
+            
             targets.update({'image': img[:, :, 0]})
             targets.update({'mask': label[:, :, 0]})
-
-            data = aug(**targets)
-            imgs = [data['image']]
-            labels = [data['mask']]
-
+            
+            aug_data = aug(**targets)
+            imgs = [aug_data['image']]
+            labels = [aug_data['mask']]
+            
             for i in range(1, img.shape[2]):
-                imgs.append(data[f'image{i}'])
-                labels.append(data[f'mask{i}'])
-
+                imgs.append(aug_data[f'image{i}'])
+                labels.append(aug_data[f'mask{i}'])
+            
             img = np.stack(imgs, axis=-1)
             label = np.stack(labels, axis=-1)
-
-        else:
-            data = aug(image=img, mask=label)
-            img, label = data['image'], data['mask']
-
-        data = {'image': img, 'label': label}
+            data['image'] = img
+            data['label'] = label
+        
         return data
+    
+    @property
+    def roi_error_range(self):
+        return self._roi_error_range
+    
+    @property
+    def output_size(self):
+        return self._output_size

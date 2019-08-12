@@ -1,7 +1,5 @@
-import glob
-import os
-
 import torch
+from pathlib2 import Path
 
 
 def save(epoch, net, optimizer, root):
@@ -11,28 +9,26 @@ def save(epoch, net, optimizer, root):
                 }, root)
 
 
-def find_latest(root):
-    files = glob.glob(os.path.join(root, '*.pth'))
-    if len(files):
-        latest_file = max(files, key=os.path.getctime)
-        return latest_file
-    else:
-        raise FileNotFoundError('No checkpoint file in "{}"'.format(root))
+def _key_exist(data, cp, key):
+    return key in data and data[key] and key in cp and cp[key]
 
 
-def load_params(net=None, optimizer=None, device='cpu', root=None, latest=False):
-    if latest:
-        root = find_latest(root)
-    assert os.path.isfile(root)
-
-    checkpoint = torch.load(root, map_location=device)
-    epoch = checkpoint['epoch'] + 1
-    if net is not None:
-        net.load_state_dict(checkpoint['net'])
-    if optimizer is not None:
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        for state in optimizer.state.values():
+def load_params(data, cp_file, device='cpu'):
+    cp_file = Path(cp_file)
+    assert cp_file.exists()
+    
+    cp = torch.load(str(cp_file), map_location=device)
+    if _key_exist(data, cp, key='net'):
+        data['net'].load_state_dict(cp['net'])
+    
+    if _key_exist(data, cp, key='optimizer'):
+        data['optimizer'].load_state_dict(cp['optimizer'])
+        for state in data['optimizer'].state.values():
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
                     state[k] = v.to(device)
-    return net, optimizer, epoch
+                    
+    if _key_exist(data, cp, key='epoch'):
+        data['epoch'] = cp['epoch']
+    
+    return data
