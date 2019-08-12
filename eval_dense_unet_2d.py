@@ -1,132 +1,178 @@
-import json
-
-import cc3d
 import click
+import cv2
 import nibabel as nib
 import numpy as np
 import torch
+import torch.nn as nn
 from pathlib2 import Path
+from torch.utils.data import DataLoader, SequentialSampler
 from tqdm import tqdm
 
 import utils.checkpoint as cp
+from dataset import KiTS19
+from dataset.transform import MedicalTransform
 from network import DenseUNet2D
+from utils.vis import imshow
 
-import cv2
 
 @click.command()
+@click.option('-b', '--batch', 'batch_size', help='Number of batch size', type=int, default=1, show_default=True)
+@click.option('-g', '--num_gpu', help='Number of GPU', type=int, default=1, show_default=True)
+@click.option('-s', '--size', 'img_size', help='Output image size', type=(int, int),
+              default=(512, 512), show_default=True)
 @click.option('--data', 'data_path', help='kits19 data path',
               type=click.Path(exists=True, dir_okay=True, resolve_path=True),
               default='data', show_default=True)
-@click.option('-r', '--resume', help='Resume checkpoint file to continue training',
-              type=click.Path(exists=True, file_okay=True, resolve_path=True), default=None, required=True)
+@click.option('-r', '--resume', help='Resume model',
+              type=click.Path(exists=True, file_okay=True, resolve_path=True), required=True)
 @click.option('-o', '--output', 'output_path', help='output image path',
               type=click.Path(dir_okay=True, resolve_path=True), default='out', show_default=True)
-def main(data_path, resume, output_path):
-    # prepare
+@click.option('--vis_intvl', help='Number of iteration interval of display visualize image. '
+                                  'No display when set to 0',
+              type=int, default=20, show_default=True)
+@click.option('--num_workers', help='Number of workers on dataloader. '
+                                    'Recommend 0 in Windows. '
+                                    'Recommend num_gpu in Linux',
+              type=int, default=0, show_default=True)
+def main(batch_size, num_gpu, img_size, data_path, resume, output_path, vis_intvl, num_workers):
     data_path = Path(data_path)
-    org_data_path = Path('D:/Qsync/workspace/kits19/data')
-    stack_num = 3
-    net = DenseUNet2D(out_ch=3)
-    
-    cp_file = Path(resume)
-    net, _, _ = cp.load_params(net, None, root=str(cp_file))
-    
     output_path = Path(output_path)
     if not output_path.exists():
         output_path.mkdir(parents=True)
     
+    roi_error_range = 15
+    transform = MedicalTransform(output_size=img_size, roi_error_range=roi_error_range, use_roi=True)
+    
+    dataset = KiTS19(data_path, stack_num=3, spec_classes=[0, 1, 2], img_size=img_size,
+                     use_roi=True, roi_file='roi.json', roi_error_range=5, test_transform=transform)
+    
+    net = DenseUNet2D(in_ch=dataset.img_channels, out_ch=dataset.num_classes)
+    
+    if resume:
+        data = {'net': net}
+        cp_file = Path(resume)
+        cp.load_params(data, cp_file, device='cpu')
+    
+    gpu_ids = [i for i in range(num_gpu)]
+    
+    print(f'{" Start evaluation ":-^40s}\n')
+    msg = f'Net: {net.__class__.__name__}\n' + \
+          f'Dataset: {dataset.__class__.__name__}\n' + \
+          f'Batch size: {batch_size}\n' + \
+          f'Device: cuda{str(gpu_ids)}\n'
+    print(msg)
+    
     torch.cuda.empty_cache()
     
-    # to GPU device
-    net = net.cuda()
+    net = torch.nn.DataParallel(net, device_ids=gpu_ids).cuda()
     
     net.eval()
     torch.set_grad_enabled(False)
+    transform.eval()
     
-    roi_path = Path('roi.json')
-    with open(roi_path, 'r') as f:
-        rois = json.load(f)
-    roi_d = 2
-    roi_range = 10
+    subset = dataset.test_dataset
+    case_slice_indices = dataset.test_case_slice_indices
     
-    test_case_file = Path(data_path) / 'test.txt'
-    test_case = []
-    f = open(test_case_file, 'r')
-    for line in f:
-        test_case.append(int(line))
+    sampler = SequentialSampler(subset)
+    data_loader = DataLoader(subset, batch_size=batch_size, sampler=sampler,
+                             num_workers=num_workers, pin_memory=True)
     
-    for case in tqdm(test_case):
-        case_root = data_path / f'case_{case:05d}'
-        imaging_dir = case_root / 'imaging'
-        case_imgs = sorted(list(imaging_dir.glob('*.npy')))
-        slices = len(case_imgs)
-        
-        roi = rois[f'case_{case:05d}']['kidney']
-        min_z = max(0, roi['min_z'] - roi_d)
-        max_z = min(slices, roi['max_z'] + roi_d + 1)
-        case_imgs = case_imgs[min_z:max_z]
-        
-        vol = []
-        for idx in range(len(case_imgs)):
-            imgs = []
-            for i in range(idx - stack_num // 2, idx + stack_num // 2 + 1):
-                if i < 0:
-                    i = 0
-                elif i >= len(case_imgs):
-                    i = len(case_imgs) - 1
-                img_path = case_imgs[i]
-                img = np.load(str(img_path))
-                min_y = max(0, roi['min_y'] - roi_range)
-                max_y = min(img.shape[0], roi['max_y'] + roi_range + 1)
-                min_x = max(0, roi['min_x'] - roi_range)
-                max_x = min(img.shape[1], roi['max_x'] + roi_range + 1)
-                mask = np.ones_like(img, dtype=np.bool)
-                mask[min_y:max_y, min_x:max_x] = False
-                img[mask] = 0
-                imgs.append(img)
+    case = 0
+    vol_output = []
+    
+    with tqdm(total=len(case_slice_indices) - 1, ascii=True, desc=f'eval/test', dynamic_ncols=True) as pbar:
+        for batch_idx, data in enumerate(data_loader):
+            imgs, idx = data['image'].cuda(), data['index']
             
-            imgs = np.stack(imgs, axis=0)
-            imgs = imgs.astype(np.float32)
-            imgs = torch.from_numpy(imgs)
-            imgs = torch.unsqueeze(imgs, dim=0)
+            outputs = net(imgs)
+            predicts = outputs['output']
+            predicts = predicts.argmax(dim=1)
             
-            imgs = imgs.cuda()
-            _, outputs, _, _, _, _ = net(imgs)
-            outputs = outputs.argmax(dim=1)
-            outputs = outputs.cpu().detach().numpy()
-            vol.append(outputs)
-        
-        vol_min_z = []
-        for _ in range(0, min_z):
-            vol_min_z.append(np.zeros_like(outputs))
-        vol_max_z = []
-        for _ in range(max_z, slices):
-            vol_max_z.append(np.zeros_like(outputs))
-        vol = vol_min_z + vol + vol_max_z
-        
-        vol = np.concatenate(vol, axis=0)
-        vol = vol.astype(np.uint8)
-        
-        org_data = org_data_path / f'case_{case:05d}' / 'imaging.nii.gz'
-        affine = nib.load(str(org_data)).get_affine()
-        
-        vol_nii = nib.Nifti1Image(vol, affine=affine)
-        vol_nii_filename = output_path / f'prediction_{case:05d}_o.nii.gz'
-        vol_nii.to_filename(str(vol_nii_filename))
-        
-        vol_ = vol.copy()
-        vol_[vol_ > 0] = 1
-        vol_cc = cc3d.connected_components(vol_)
-        cc_sum = [(i, vol_cc[vol_cc == i].shape[0]) for i in range(vol_cc.max() + 1)]
-        cc_sum.sort(key=lambda x: x[1], reverse=True)
-        cc_sum.pop(0)  # remove background
-        reduce_cc = [cc_sum[i][0] for i in range(1, len(cc_sum)) if cc_sum[i][1] < cc_sum[0][1] * 0.1]
-        for i in reduce_cc:
-            vol[vol_cc == i] = 0
-        
-        vol_nii = nib.Nifti1Image(vol, affine=affine)
-        vol_nii_filename = output_path / f'prediction_{case:05d}.nii.gz'
-        vol_nii.to_filename(str(vol_nii_filename))
+            predicts = predicts.cpu().detach().numpy()
+            idx = idx.numpy()
+            
+            vol_output.append(predicts)
+            
+            while case < len(case_slice_indices) - 1 and idx[-1] >= case_slice_indices[case + 1] - 1:
+                vol_output = np.concatenate(vol_output, axis=0)
+                vol_num_slice = case_slice_indices[case + 1] - case_slice_indices[case]
+                
+                roi = dataset.get_roi(case, type='test')
+                vol = vol_output[:vol_num_slice]
+                vol_ = reverse_transform(vol, roi, dataset, transform)
+                vol_ = vol_.astype(np.uint8)
+                
+                case_id = dataset.case_idx_to_case_id(case, type='test')
+                affine = np.load(data_path / f'case_{case_id:05d}' / 'affine.npy')
+                vol_nii = nib.Nifti1Image(vol_, affine)
+                vol_nii_filename = output_path / f'prediction_{case_id:05d}.nii.gz'
+                vol_nii.to_filename(str(vol_nii_filename))
+                
+                vol_output = [vol_output[vol_num_slice:]]
+                case += 1
+                pbar.update(1)
+            
+            if vis_intvl > 0 and batch_idx % vis_intvl == 0:
+                data['predict'] = predicts
+                data = dataset.vis_transform(data)
+                imgs, predicts = data['image'], data['predict']
+                imshow(title=f'eval/test', imgs=(imgs[0, 1], predicts[0]), shape=(1, 2),
+                       subtitle=('image', 'predict'))
+
+
+def reverse_transform(vol, roi, dataset, transform):
+    min_x = max(0, roi['kidney']['min_x'] - transform.roi_error_range)
+    max_x = min(vol.shape[-1], roi['kidney']['max_x'] + transform.roi_error_range)
+    min_y = max(0, roi['kidney']['min_y'] - transform.roi_error_range)
+    max_y = min(vol.shape[-2], roi['kidney']['max_y'] + transform.roi_error_range)
+    min_z = max(0, roi['kidney']['min_z'] - dataset.roi_error_range)
+    max_z = min(roi['vol']['total_z'], roi['kidney']['max_z'] + dataset.roi_error_range)
+    
+    min_height = roi['vol']['total_y']
+    min_width = roi['vol']['total_x']
+    
+    roi_rows = max_y - min_y
+    roi_cols = max_x - min_x
+    max_size = max(transform.output_size[0], transform.output_size[1])
+    scale = max_size / float(max(roi_cols, roi_rows))
+    rows = int(roi_rows * scale)
+    cols = int(roi_cols * scale)
+    
+    if rows < min_height:
+        h_pad_top = int((min_height - rows) / 2.0)
+        h_pad_bottom = rows + h_pad_top
+    else:
+        h_pad_top = 0
+        h_pad_bottom = min_height
+    
+    if cols < min_width:
+        w_pad_left = int((min_width - cols) / 2.0)
+        w_pad_right = cols + w_pad_left
+    else:
+        w_pad_left = 0
+        w_pad_right = min_width
+    
+    for i in range(len(vol)):
+        img = vol[i]
+        reverse_padding_img = img[h_pad_top:h_pad_bottom, w_pad_left:w_pad_right]
+        reverse_padding_img = reverse_padding_img.astype(np.uint8)
+        reverse_resize_img = cv2.resize(reverse_padding_img, dsize=(max_x - min_x, max_y - min_y),
+                                        interpolation=cv2.INTER_LINEAR)
+        reverse_resize_img = reverse_resize_img.astype(np.int64)
+        reverse_img = np.zeros((min_height, min_width))
+        reverse_img[min_y:max_y, min_x: max_x] = reverse_resize_img
+        vol[i] = reverse_img
+    
+    size = (1, min_height, min_width)
+    vol_min_z = [np.zeros(size) for _ in range(0, min_z)]
+    vol_max_z = [np.zeros(size) for _ in range(max_z, roi['vol']['total_z'])]
+    
+    vol = vol_min_z + [vol] + vol_max_z
+    vol = np.concatenate(vol, axis=0)
+    
+    assert vol.shape == (roi['vol']['total_z'], roi['vol']['total_y'], roi['vol']['total_x'])
+    
+    return vol
 
 
 if __name__ == '__main__':
