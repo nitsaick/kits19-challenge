@@ -11,7 +11,7 @@ from tqdm import tqdm
 import utils.checkpoint as cp
 from dataset import KiTS19
 from dataset.transform import MedicalTransform
-from network import DenseUNet2D
+from network import DenseUNet
 from utils.vis import imshow
 
 
@@ -46,7 +46,7 @@ def main(batch_size, num_gpu, img_size, data_path, resume, output_path, vis_intv
     dataset = KiTS19(data_path, stack_num=3, spec_classes=[0, 1, 2], img_size=img_size,
                      use_roi=True, roi_file='roi.json', roi_error_range=5, test_transform=transform)
     
-    net = DenseUNet2D(in_ch=dataset.img_channels, out_ch=dataset.num_classes)
+    net = DenseUNet(in_ch=dataset.img_channels, out_ch=dataset.num_classes)
     
     if resume:
         data = {'net': net}

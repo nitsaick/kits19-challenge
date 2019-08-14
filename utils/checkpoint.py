@@ -27,7 +27,7 @@ def load_params(data, cp_file, device='cpu'):
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
                     state[k] = v.to(device)
-                    
+    
     if _key_exist(data, cp, key='epoch'):
         data['epoch'] = cp['epoch']
     

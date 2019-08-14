@@ -15,7 +15,7 @@ from dataset import KiTS19
 from dataset.transform import MedicalTransform
 from loss import GeneralizedDiceLoss
 from loss.util import class2one_hot
-from network import DenseUNet2D
+from network import DenseUNet
 from utils.metrics import Evaluator
 from utils.vis import imshow
 
@@ -66,7 +66,7 @@ def main(epoch_num, batch_size, lr, num_gpu, img_size, data_path, log_path,
                      use_roi=True, roi_file='roi.json', roi_error_range=5,
                      train_transform=transform, valid_transform=transform)
     
-    net = DenseUNet2D(in_ch=dataset.img_channels, out_ch=dataset.num_classes)
+    net = DenseUNet(in_ch=dataset.img_channels, out_ch=dataset.num_classes)
     
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
     

@@ -2,9 +2,9 @@ import torch.nn as nn
 from torchvision import models
 
 
-class DenseUNet2D(nn.Module):
+class DenseUNet(nn.Module):
     def __init__(self, in_ch=3, out_ch=3):
-        super(DenseUNet2D, self).__init__()
+        super(DenseUNet, self).__init__()
         densenet = models.densenet161(pretrained=True)
         backbone = list(list(densenet.children())[0].children())
         
@@ -99,5 +99,5 @@ class _Up(nn.Module):
 if __name__ == '__main__':
     from torchsummary import summary
     
-    net = DenseUNet2D().cuda()
+    net = DenseUNet().cuda()
     summary(net, (3, 512, 512))

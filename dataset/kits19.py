@@ -341,7 +341,7 @@ class KiTS19(data.Dataset):
     @property
     def spec_classes(self):
         return self._spec_classes
-
+    
     @property
     def roi_error_range(self):
         return self._roi_error_range

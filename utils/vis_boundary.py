@@ -8,33 +8,33 @@ def vis_boundary(img, label, pred, num_classes):
     img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     label = label.astype(np.uint8)
     pred = pred.astype(np.uint8)
-
+    
     imgs = []
     for cls in range(1, num_classes):
         label_boundary = np.zeros_like(label)
         pred_boundary = np.zeros_like(pred)
-
+        
         label_boundary[label == cls] = label[label == cls]
         pred_boundary[pred == cls] = pred[pred == cls]
-
+        
         label_boundary = cv2.Canny(label_boundary, 0, 1)
         pred_boundary = cv2.Canny(pred_boundary, 0, 1)
         # overlay = np.zeros_like(label)
         # overlay[np.logical_and(label_boundary, pred_boundary)] = 255
-
+        
         img_boindary = img.copy()
         img_boindary[pred_boundary == 255] = [255, 0, 0]
         img_boindary[label_boundary == 255] = [0, 255, 0]
         # img_boindary[overlay == 255] = [0, 0, 255]
-
+        
         imgs.append(img_boindary)
-
+    
     return imgs
 
 
 if __name__ == '__main__':
     from utils.vis import imshow
-
+    
     root = Path('data')
     cases = sorted([d for d in root.iterdir() if d.is_dir()])
     for case in cases:

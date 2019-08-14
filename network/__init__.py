@@ -1,2 +1,2 @@
+from .dense_unet import DenseUNet
 from .res_unet import ResUNet
-from .dense_unet_2d import DenseUNet2D

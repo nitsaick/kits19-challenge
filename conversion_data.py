@@ -4,6 +4,7 @@ import click
 import nibabel as nib
 import numpy as np
 from pathlib2 import Path
+
 from dataset import KiTS19
 
 
@@ -15,7 +16,7 @@ from dataset import KiTS19
 def conversion_all(data, output):
     data = Path(data)
     output = Path(output)
-    
+
     cases = sorted([d for d in data.iterdir() if d.is_dir()])
     pool = mp.Pool()
     pool.map(conversion, zip(cases, [output] * len(cases)))
