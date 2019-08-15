@@ -38,12 +38,12 @@ python get_roi.py -b 32 -g 4 -s 512 512 -d "data" -r "runs/ResUNet/checkpoint/be
 
 ### 5. Train DenseUNet for Kidney Tumor Segmentation
 ```bash
-python train_dense_unet.py -e 100 -b 32 -l 0.0001 -g 4 -s 512 512 --data "data" --log "runs/DenseUNet" --vis_intvl 20 --num_workers 8
+python train_dense_unet.py -e 100 -b 32 -l 0.0001 -g 4 -s 512 512 --data "data" --log "runs/DenseUNet" --vis_intvl 0 --num_workers 8
 ```
 
 ### 6. Evaluation Test Case
 ```bash
-python eval_dense_unet.py -b 32 -g 4 -s 512 512 --data "data" -r "runs/DenseUNet/checkpoint/best.pth" --vis_intvl 20 --num_workers 8 -o "out"
+python eval_dense_unet.py -b 32 -g 4 -s 512 512 --data "data" -r "runs/DenseUNet/checkpoint/best.pth" --vis_intvl 0 --num_workers 8 -o "out"
 ```
 
 ### 7. Post-processing
