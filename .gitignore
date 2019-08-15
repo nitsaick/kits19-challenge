@@ -127,8 +127,6 @@ fabric.properties
 
 .idea/
 
-data/
-
 runs/
 
 .ipynb_checkpoints/
