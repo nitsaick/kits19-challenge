@@ -1,5 +1,5 @@
 import json
-from pathlib import Path
+from pathlib2 import Path
 
 import cv2
 import numpy as np
