@@ -253,7 +253,7 @@ def evaluation(net, dataset, epoch, batch_size, num_workers, vis_intvl, logger, 
             dc = dc_each_case[cls]
             logger.add_scalar(f'{type}_acc_each_case/case_{case_id:05d}/dc_{cls}', dc, epoch)
     
-    score = (acc['dc_per_case_1'] + acc['dc_per_case_2']) / 2
+    score = acc['dc_per_case_1']
     logger.add_scalar(f'{type}/score', score, epoch)
     return score
 
