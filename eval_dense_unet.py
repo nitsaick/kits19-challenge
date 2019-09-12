@@ -20,7 +20,7 @@ from utils.vis import imshow
 @click.option('-g', '--num_gpu', help='Number of GPU', type=int, default=1, show_default=True)
 @click.option('-s', '--size', 'img_size', help='Output image size', type=(int, int),
               default=(512, 512), show_default=True)
-@click.option('--data', 'data_path', help='kits19 data path',
+@click.option('-d', '--data', 'data_path', help='Path of kits19 data after conversion',
               type=click.Path(exists=True, dir_okay=True, resolve_path=True),
               default='data', show_default=True)
 @click.option('-r', '--resume', help='Resume model',

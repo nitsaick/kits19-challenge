@@ -37,17 +37,15 @@ def conversion(data):
         for i in range(vol.shape[0]):
             np.save(str(imaging_dir / f'{i:03}.npy'), vol[i])
 
-    path = case / 'segmentation.nii.gz'
-    if not path.exists():
-        return
-
-    seg = nib.load(str(case / 'segmentation.nii.gz')).get_data()
-    segmentation_dir = output / case.name / 'segmentation'
-    if not segmentation_dir.exists():
-        segmentation_dir.mkdir(parents=True)
-    if len(list(segmentation_dir.glob('*.npy'))) != seg.shape[0]:
-        for i in range(seg.shape[0]):
-            np.save(str(segmentation_dir / f'{i:03}.npy'), seg[i])
+    segmentation_file = case / 'segmentation.nii.gz'
+    if segmentation_file.exists():
+        seg = nib.load(str(case / 'segmentation.nii.gz')).get_data()
+        segmentation_dir = output / case.name / 'segmentation'
+        if not segmentation_dir.exists():
+            segmentation_dir.mkdir(parents=True)
+        if len(list(segmentation_dir.glob('*.npy'))) != seg.shape[0]:
+            for i in range(seg.shape[0]):
+                np.save(str(segmentation_dir / f'{i:03}.npy'), seg[i])
 
     affine_dir = output / case.name
     if not affine_dir.exists():

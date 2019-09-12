@@ -5,7 +5,6 @@ import cv2
 import nibabel as nib
 import numpy as np
 import torch
-import torch.nn as nn
 from pathlib2 import Path
 from torch.utils.data import DataLoader, SequentialSampler
 from tqdm import tqdm
@@ -15,40 +14,6 @@ from dataset import KiTS19
 from dataset.transform import MedicalTransform
 from network import ResUNet
 from utils.vis import imshow
-
-
-@click.command()
-@click.option('-d', '--data', help='kits19 data path',
-              type=click.Path(exists=True, dir_okay=True, resolve_path=True), required=True)
-@click.option('-o', '--output', 'roi_file', help='output roi file path',
-              type=click.Path(file_okay=True, resolve_path=True), default='roi_gt.json', show_default=True)
-def get_roi_from_gt(data, roi_file):
-    data = Path(data)
-    
-    cases = sorted([d for d in data.iterdir() if d.is_dir()])
-    case_idx = 0
-    rois = {}
-    for case in tqdm(cases):
-        img_file = case / 'imaging.nii.gz'
-        assert img_file.exists()
-        img = nib.load(str(img_file)).get_data()
-        total_z, total_y, total_x = img.shape
-        vol = {'total_x': total_x, 'total_y': total_y, 'total_z': total_z}
-        case_data = {'vol': vol}
-        
-        seg_file = case / 'segmentation.nii.gz'
-        if seg_file.exists():
-            seg = nib.load(str(seg_file)).get_data()
-            kidney = calc(seg, idx=1)
-            tumor = calc(seg, idx=2)
-            case_data.update({'kidney': kidney, 'tumor': tumor})
-        
-        rois[f'case_{case_idx:05d}'] = case_data
-        
-        with open(roi_file, 'w') as f:
-            json.dump(rois, f, indent=4, separators=(',', ': '))
-        
-        case_idx += 1
 
 
 def calc(seg, idx):
@@ -82,29 +47,39 @@ def calc(seg, idx):
     return roi
 
 
-@click.command()
-@click.option('-b', '--batch', 'batch_size', help='Number of batch size', type=int, default=1, show_default=True)
-@click.option('-g', '--num_gpu', help='Number of GPU', type=int, default=1, show_default=True)
-@click.option('-s', '--size', 'img_size', help='Output image size', type=(int, int),
-              default=(512, 512), show_default=True)
-@click.option('--data', 'data_path', help='kits19 data path',
-              type=click.Path(exists=True, dir_okay=True, resolve_path=True),
-              default='data', show_default=True)
-@click.option('-r', '--resume', help='Resume model',
-              type=click.Path(exists=True, file_okay=True, resolve_path=True), required=True)
-@click.option('-o', '--output', 'roi_file', help='output roi file path',
-              type=click.Path(file_okay=True, resolve_path=True), default='roi_gt.json', show_default=True)
-@click.option('--vis_intvl', help='Number of iteration interval of display visualize image. '
-                                  'No display when set to 0',
-              type=int, default=20, show_default=True)
-@click.option('--num_workers', help='Number of workers on dataloader. '
-                                    'Recommend 0 in Windows. '
-                                    'Recommend num_gpu in Linux',
-              type=int, default=0, show_default=True)
+def get_roi_from_gt(data_path, roi_file):
+    data_path = Path(data_path)
+    
+    cases = sorted([d for d in data_path.iterdir() if d.is_dir()])
+    case_idx = 0
+    rois = {}
+    for case in tqdm(cases, ascii=True, dynamic_ncols=True):
+        img_file = case / 'imaging.nii.gz'
+        assert img_file.exists()
+        img = nib.load(str(img_file)).get_data()
+        total_z, total_y, total_x = img.shape
+        vol = {'total_x': total_x, 'total_y': total_y, 'total_z': total_z}
+        case_data = {'vol': vol}
+        
+        seg_file = case / 'segmentation.nii.gz'
+        if seg_file.exists():
+            seg = nib.load(str(seg_file)).get_data()
+            kidney = calc(seg, idx=1)
+            tumor = calc(seg, idx=2)
+            case_data.update({'kidney': kidney, 'tumor': tumor})
+        
+        rois[f'case_{case_idx:05d}'] = case_data
+        
+        with open(roi_file, 'w') as f:
+            json.dump(rois, f, indent=4, separators=(',', ': '))
+        
+        case_idx += 1
+
+
 def get_roi_from_resunet(batch_size, num_gpu, img_size, data_path, resume, roi_file, vis_intvl, num_workers):
     with open(roi_file, 'r') as f:
         rois = json.load(f)
-        
+    
     data_path = Path(data_path)
     
     transform = MedicalTransform(output_size=img_size, roi_error_range=15, use_roi=False)
@@ -175,6 +150,32 @@ def get_roi_from_resunet(batch_size, num_gpu, img_size, data_path, resume, roi_f
                        subtitle=('image', 'predict'))
 
 
+@click.command()
+@click.option('--org_data', 'org_data_path', help='kits19 data path',
+              type=click.Path(exists=True, dir_okay=True, resolve_path=True),
+              default='data', show_default=True)
+@click.option('--data', 'data_path', help='Path of kits19 data after conversion',
+              type=click.Path(exists=True, dir_okay=True, resolve_path=True),
+              default='data', show_default=True)
+@click.option('-o', '--output', 'roi_file', help='Output roi file path',
+              type=click.Path(file_okay=True, resolve_path=True), default='roi_gt.json', show_default=True)
+@click.option('-b', '--batch', 'batch_size', help='Number of batch size', type=int, default=1, show_default=True)
+@click.option('-g', '--num_gpu', help='Number of GPU', type=int, default=1, show_default=True)
+@click.option('-s', '--size', 'img_size', help='Output image size', type=(int, int),
+              default=(512, 512), show_default=True)
+@click.option('-r', '--resume', help='Resume model',
+              type=click.Path(exists=True, file_okay=True, resolve_path=True), required=True)
+@click.option('--vis_intvl', help='Number of iteration interval of display visualize image. '
+                                  'No display when set to 0',
+              type=int, default=20, show_default=True)
+@click.option('--num_workers', help='Number of workers on dataloader. '
+                                    'Recommend 0 in Windows. '
+                                    'Recommend num_gpu in Linux',
+              type=int, default=0, show_default=True)
+def get_roi(org_data_path, data_path, roi_file, batch_size, num_gpu, img_size, resume, vis_intvl, num_workers):
+    get_roi_from_gt(org_data_path, roi_file)
+    get_roi_from_resunet(batch_size, num_gpu, img_size, data_path, resume, roi_file, vis_intvl, num_workers)
+
+
 if __name__ == '__main__':
-    get_roi_from_gt()
-    get_roi_from_resunet()
+    get_roi()

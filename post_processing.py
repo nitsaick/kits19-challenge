@@ -11,8 +11,11 @@ from tqdm import tqdm
 @click.option('-o', '--output', help='output path',
               type=click.Path(dir_okay=True, resolve_path=True), required=True)
 def main(data, output):
-    data = Path(data)
-    output = Path(output)
+    data = Path(data).resolve()
+    output = Path(output).resolve()
+    
+    assert data != output, f'postprocess data will replace original data, use another output path'
+    
     if not output.exists():
         output.mkdir(parents=True)
     
@@ -22,10 +25,9 @@ def main(data, output):
         affine = vol_nii.affine
         vol = vol_nii.get_data()
         vol = post_processing(vol)
-        filename = pred.name.split('.')[0] + '_postproc'
         vol_nii = nib.Nifti1Image(vol, affine)
         
-        vol_nii_filename = output / f'{filename}.nii.gz'
+        vol_nii_filename = output / pred.name
         vol_nii.to_filename(str(vol_nii_filename))
 
 
