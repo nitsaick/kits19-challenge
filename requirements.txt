@@ -3,7 +3,7 @@ albumentations == 0.2.3
 connected_components_3d == 1.4.1
 matplotlib == 3.0.3
 nibabel == 2.4.0
-numpy == 1.16.3
+numpy == 1.22.0
 opencv_python_headless == 4.1.0.25
 pathlib2 == 2.3.3
 scipy == 1.1.0
